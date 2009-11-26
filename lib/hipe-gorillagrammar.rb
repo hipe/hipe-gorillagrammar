@@ -2,16 +2,21 @@ require 'rubygems'
 require 'ruby-debug'
 require 'singleton'
 
+module Hipe; module GorillaGrammar; module PipeHack; end; end; end;
+  
 class Symbol 
+  include Hipe::GorillaGrammar::PipeHack
   def satisfied?; @is_satisfied; end
   def accepting?; @is_accepting; end
-  
   # we might regret this
   def =~ (symbol_data)
-    Hipe::GorillaGrammar::Runtime.instance.current_grammar.register_symbol self, symbol_data
+    Hipe::GorillaGrammar::Runtime.instance.current_grammar!.register_symbol self, symbol_data
   end
-
   alias_method :[], :=~ # allows for e.g. a terminal 'var' like  :first_name[/^.+$/]
+end
+
+class String  # experimental
+  include Hipe::GorillaGrammar::PipeHack
 end
 
 :D.instance_variable_set :@is_satisfied, true 
@@ -28,7 +33,7 @@ end
 module Hipe
   
   def self.GorillaGrammar *args, &block
-    GorillaGrammar.make(*args, &block)
+    GorillaGrammar.define(*args, &block)
   end
   
   module GorillaGrammar
@@ -38,19 +43,20 @@ module Hipe
 
     class Runtime # for global-like stuff
       include Singleton      
-      def initialize
-        @grammar_stack = []
-      end
+      def initialize; @grammar_stack = []; end
       def grammar_push(grammar)
         raise UsageFailure.new('sorry, no making grammars inside of grammars') if @grammar_stack.size > 0
         @grammar_stack << grammar
       end
-      def grammar_pop
-        @grammar_stack.pop
+      def grammar_pop; @grammar_stack.pop; end
+      def current_grammar!
+        raise UsageFailure.new("no current grammar") unless current_grammar
+        current_grammar 
       end
-      def current_grammar
-        raise "no current grammar" unless @grammar_stack.size == 1
-        @grammar_stack[0]
+      def current_grammar;  @grammar_stack.last;  end
+      def self.method_missing(a,*b)
+        return instance.send(a,*b) if instance.respond_to? a
+        raise NoMethodError.new %{undefined method `#{a}' for #{inspect}}
       end
     end
     
@@ -83,9 +89,9 @@ module Hipe
       end
     end
 
-    def self.make &block
+    def self.define &block
       begin
-        Runtime.instance.grammar_push self        
+        Runtime.instance.grammar_push(self)
         self.instance_eval(&block)
       ensure
         Runtime.instance.grammar_pop        
@@ -96,6 +102,44 @@ module Hipe
     def self.add_shorthand name, klass
       @@shorthands[name] = klass
     end
+    
+    module PipeHack
+      def |(other)
+        ok = case other.class; when String; true; when Symbol; true; else; false; end
+        raise UsageFailure("for now, pipe hack on strings and symbols only") unless ok
+        if self.instance_of? RangeOf
+          raise UsageFailure("no") unless self.pipe_hack
+          self.unshift other
+          ret = self
+        else 
+          ret = RangeOf.new((1..1),other)
+          ret.pipe_hack = true
+        end
+        ret
+      end
+    end
+    
+    # This guy is the one that manages mapping builtin ruby data
+    # structures to classes of symbols in our grammar thing.
+    module SymbolSet # "bless" an array of symbol ruby structures
+      # @return the original object extended or a new object
+      def self.bless obj 
+        case obj
+          when GorillaSymbol then obj
+          when Symbol        then GrammarSymbol.new obj  
+          when String        then obj.extend StringTerminal
+          when Regexp        then obj.extend RegexpTerminal
+          else UsageFailure.new %{don't know what to do with "#{obj.inspect}"}
+        end  
+      end
+      # remember this may be used for both lists and sets
+      def self.extend_object array
+        (0..array.size-1).each do |i|
+          array[i] = self.bless array[i]
+        end
+      end # def extend_obj
+    end # SymbolSet    
+    
         
     def self.method_missing name, *args
       if @@shorthands[name]
@@ -128,6 +172,9 @@ module Hipe
       def to_native
         self.dup
       end
+      #def inspect
+      #  %{#{super}#{self.class.ancestors.map{|m| m.to_s}.select{|s|/^Hipe::GorillaGrammar/=~s}.join(',')}}
+      #end
       # def expecting -- return array of objects that respond to to_s
     end
     
@@ -152,23 +199,12 @@ module Hipe
       def expecting; [%{"#{self}"}]; end
     end
     
-    #:timmy[/^.+$/]
-    #
-    #class PlaceholderTerminal # for Symbol builtin type, can't define singleton - no virtual class
-    #  include TerminalSymbol
-    #  def initialize symbol
-    #    @symbol = symbol
-    #  end
-    #  def grammar_description_name
-    #    @internal.inspect
-    #  end
-    #  def match token, peek
-    #    @match_data = token;
-    #    status = :>
-    #    @status = status if peek != false
-    #    status
-    #  end
-    #end    
+    module GrammarSymbol
+      include GorillaSymbol
+      def self.new symbol
+        super symbol
+      end
+    end
 
     module RegexpTerminal
       include TerminalSymbol
@@ -218,26 +254,8 @@ module Hipe
       end
     end
     
-    # This guy is the one that manages mapping builtin ruby data
-    # structures to classes of symbols in our grammar thing.
-    module SymbolSet # "bless" an array of symbol ruby structures
-      # remember this may be used for both lists and sets
-      def self.extend_object array
-        array.each_with_index do |obj, i|
-          case obj
-            when GorillaSymbol then next
-            when String        then obj.extend StringTerminal
-            when Symbol        then array[i] = PlaceholderTerminal.new(obj) # b/c we can't extend a symbol
-            when Regexp        then obj.extend RegexpTerminal
-            else UsageFailure.new %{don't know what to do with "#{obj.inspect}"}
-          end  
-        end
-      end # def extend_obj
-    end # SymbolSet
-    
     class Sequence < Array
-      include CanParse
-      include NonTerminalSymbol
+      include CanParse, NonTerminalSymbol
       extend GorillaSymbol::ModuleMethods 
       register_shorthand_constructor :sequence, self
 
@@ -298,6 +316,8 @@ module Hipe
             when :O then :O
             when :D 
               (@index==@grammar.size-1) ? :D : :O
+            else 
+              raise GorillaException.new('symbol returned bad status')
           end # case
           break;
         end while true
@@ -313,35 +333,40 @@ module Hipe
     end # Sequence
 
     class RangeOf < Array
-      include NonTerminalSymbol
+      include CanParse, NonTerminalSymbol, PipeHack
       extend GorillaSymbol::ModuleMethods
-      include CanParse  
       register_shorthand_constructor :zero_or_more_of, self      
       register_shorthand_constructor :one_or_more_of, self
       register_shorthand_constructor :zero_or_one_of, self
       register_shorthand_constructor :one_of, self      
       def self.construct_from_shorthand name, *args
-        new name, *args
+        self.new name, *args
       end      
       protected 
       def initialize name, *args
         raise GrammarGrammarException.new "Arguments must be non-zero length" unless args.size > 0
-        @range = case name
+        @range = name.instance_of?(Range) ? name : case name
           when :zero_or_more_of then (0..Infinity)
           when :one_or_more_of then (1..Infinity)
           when :zero_or_one_of then (0..1)
           when :one_of then (1..1)
-          else raise UsageFailure %{invalid range string "#{name}"}
+          else raise UsageFailure.new(%{invalid name string "#{name}"})
         end
         @group = args
         @group.extend SymbolSet
       end
+      def unshift jobber # for PipeHack
+        raise GorillaException.new('no') if @is_parse
+        @grammar.unshift jobber
+      end
       public
       attr_reader :range
+      attr_accessor :pipe_hack
       def expecting
         @group.map{|x| x.expecting}.flatten
       end
       def init_for_parse
+        @is_parse = 1
         @frame = {}
         @group.each_with_index do |child, index|
           @frame[index] = { :obj => child.copy_for_parse }
@@ -419,4 +444,4 @@ module Hipe
   end
 end
 
-# note3 consider getting rid of unused base classes
+# note 3 (resolved - we use them now) consider getting rid of unused base classes

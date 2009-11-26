@@ -1,4 +1,5 @@
-# require File.expand_path(File.dirname(__FILE__) + "/../spec_helper")
+#require File.expand_path(File.dirname(__FILE__) + "/../spec_helper")
+#rake spec SPEC=spec/sequence_spec.rb 
 require 'hipe-gorillagrammar'
 
 module Hipe
@@ -48,33 +49,33 @@ module Hipe
       result.to_a.should == [['b'],'c']
     end
     
-    it "should parse a little more complex" do
-      grammar = Hipe.GorillaGrammar do
-        sequence 'a',one_or_more_of('b','e'),'c'
-      end
-      result = grammar.parse(['a','b','e','b','c'])
-      result.is_error?.should == false
-      result.to_a.should == ['a',['b','e','b'],'c']
-    end    
-    
-    it "should render expecting message jumping btwn two frames" do
-      grammar = Hipe.GorillaGrammar do
-        sequence zero_or_more_of('b','e'),'c'
-      end      
-      result = grammar.parse(['d'])
-      result.is_error?.should == true
-      result.message.should match(/expecting "b", "e" or "c"/)
-    end
-    
-    it "should handle zero or more at begin" do
-      grammar = Hipe.GorillaGrammar do
-        sequence zero_or_more_of('b','e'),'c'
-      end
-      result = grammar.parse(['b','e','c'])
-      result.is_error?.should == false
-      result.to_a.should == [['b','e'],'c']
-      
-    end    
+     it "should parse a little more complex" do
+       grammar = Hipe.GorillaGrammar do
+         sequence 'a',one_or_more_of('b','e'),'c'
+       end
+       result = grammar.parse(['a','b','e','b','c'])
+       result.is_error?.should == false
+       result.to_a.should == ['a',['b','e','b'],'c']
+     end    
+     
+     it "should render expecting message jumping btwn two frames" do
+       grammar = Hipe.GorillaGrammar do
+         sequence zero_or_more_of('b','e'),'c'
+       end      
+       result = grammar.parse(['d'])
+       result.is_error?.should == true
+       result.message.should match(/expecting "b", "e" or "c"/)
+     end
+     
+     it "should handle zero or more at begin" do
+       grammar = Hipe.GorillaGrammar do
+         sequence zero_or_more_of('b','e'),'c'
+       end
+       result = grammar.parse(['b','e','c'])
+       result.is_error?.should == false
+       result.to_a.should == [['b','e'],'c']
+       
+     end    
   end
 
 end 

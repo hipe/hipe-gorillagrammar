@@ -1,24 +1,66 @@
+# rake spec SPEC=spec/shorthand_spec.rb 
+require 'hipe-gorillagrammar'
+
+include Hipe::GorillaGrammar
+
+describe Runtime do
   
+  it "should return nil" do
+    Runtime.current_grammar.should == nil    
+  end
   
-  
-# 
-# it "should do it" do
-#   grammar = Hipe.GorillaGrammar do
-#     sequence 'a',one_or_more_of('e','f'),'c'
-#   end
-#   grammar.parse(['a','b','b','b','c'])
-#   
-#   
-# end
-  
+  it "should return nil again" do
+    Runtime.current_grammar.should == nil    
+  end
+
+  it "should throw when there's no current grammar" do
+    lambda{
+      Runtime.current_grammar!
+    }.should raise_error(UsageFailure)
+  end
+   
+   it "should work violently" do
+     Hipe::GorillaGrammar.define {
+       Runtime.current_grammar!.should == Hipe::GorillaGrammar
+     }
+   end
+   
+   it "should work calmly" do
+     Hipe::GorillaGrammar.define {
+       Runtime.current_grammar.should == Hipe::GorillaGrammar
+     }
+   end
+   
+   it "should not allow doubles" do
+     lambda{
+       Hipe::GorillaGrammar.define {
+         Hipe::GorillaGrammar.define {}
+       }
+     }.should raise_error(UsageFailure)
+   end  
+   
+   it "should work after" do
+     Hipe::GorillaGrammar.define {
  
- #
- # it "yeah right" do
- #   pending "this would be awesome"
- #   g = Hipe.GorillaGrammar {
- #     :object   =~  anything()
- #     :verb      =~ 'run' || 'walk' || 'blah'
- #     :predicate =~ [:verb,:object]
- #     :sentence =~ [:subject,:predicate]
- #   end
- #  }
+     }
+     Runtime.current_grammar.should == nil
+   end  
+   
+ end
+ 
+ 
+ 
+# describe Hipe::GorillaGrammar, "with shorthands" do
+#   it "should parse with stub functions" do
+#     g = Hipe.GorillaGrammar {
+#       :subject   =~ 'you' || 'i' || 'we'
+#       :verb      =~ (1.of 'run','walk','blah')
+#       :predicate =~ [(0..1).of :adverb, :verb, :object[/^.*$/]]
+#       :sentence  =~ [:subject,:predicate]
+#     }
+#     
+#     pending "this would be awesome"
+#   end
+   
+
+ 
