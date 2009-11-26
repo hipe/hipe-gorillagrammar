@@ -18,17 +18,21 @@ describe Runtime do
       Runtime.current_grammar!
     }.should raise_error(UsageFailure)
   end
-   
+
    it "should work violently" do
+     g = nil     
      Hipe::GorillaGrammar.define {
-       Runtime.current_grammar!.should == Hipe::GorillaGrammar
+       g = Runtime.current_grammar!
      }
+     g.should be_an_instance_of Grammar
    end
    
    it "should work calmly" do
+     g = nil
      Hipe::GorillaGrammar.define {
-       Runtime.current_grammar.should == Hipe::GorillaGrammar
+       g = Runtime.current_grammar
      }
+     g.should be_an_instance_of Grammar     
    end
    
    it "should not allow doubles" do

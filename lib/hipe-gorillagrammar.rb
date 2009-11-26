@@ -40,15 +40,28 @@ module Hipe
     
     VERSION = '0.0.0'
     Infinity = 1.0 / 0
+    
+    def self.define(name = nil, &block)
+      begin
+        g = Runtime.instance.create_grammar! name
+        Runtime.instance.push_grammar g
+        g.instance_eval(&block)
+      ensure
+        Runtime.instance.pop_grammar        
+      end
+    end
 
     class Runtime # for global-like stuff
       include Singleton      
-      def initialize; @grammar_stack = []; end
-      def grammar_push(grammar)
+      def initialize 
+        @grammar_stack = []
+        @grammars = {}
+      end
+      def push_grammar(grammar)
         raise UsageFailure.new('sorry, no making grammars inside of grammars') if @grammar_stack.size > 0
         @grammar_stack << grammar
       end
-      def grammar_pop; @grammar_stack.pop; end
+      def pop_grammar; @grammar_stack.pop; end
       def current_grammar!
         raise UsageFailure.new("no current grammar") unless current_grammar
         current_grammar 
@@ -57,6 +70,33 @@ module Hipe
       def self.method_missing(a,*b)
         return instance.send(a,*b) if instance.respond_to? a
         raise NoMethodError.new %{undefined method `#{a}' for #{inspect}}
+      end
+      def create_grammar! name
+        raise GorillaException.new("for now we can't reopen grammars") if name && @grammars[name]
+        g = Grammar.new
+        name ||= %{grammar#{g.object_id}}
+        g.name = name
+        @grammars[name] = g
+      end
+    end
+    
+    class Grammar
+      @shorthands = {}
+      class << self
+        attr_reader :shorthands
+      end
+      attr_accessor :name
+      def self.register_shorthand name, klass
+        @shorthands[name] = klass
+      end
+      def method_missing name, *args
+        if Grammar.shorthands[name]
+          Grammar.shorthands[name].construct_from_shorthand name, *args
+        else
+          super name, *args
+          #s = 'available shorthands: ('+Grammar.shorthands.keys.map{|k| k.to_s}.sort * ', '+')'
+          #raise NoMethodError.new "undefined method #{name} for #{self.inspect}:#{self.class} -- #{s}"
+        end
       end
     end
     
@@ -89,20 +129,6 @@ module Hipe
       end
     end
 
-    def self.define &block
-      begin
-        Runtime.instance.grammar_push(self)
-        self.instance_eval(&block)
-      ensure
-        Runtime.instance.grammar_pop        
-      end
-    end
-          
-    @@shorthands = {}      
-    def self.add_shorthand name, klass
-      @@shorthands[name] = klass
-    end
-    
     module PipeHack
       def |(other)
         ok = case other.class; when String; true; when Symbol; true; else; false; end
@@ -139,16 +165,6 @@ module Hipe
         end
       end # def extend_obj
     end # SymbolSet    
-    
-        
-    def self.method_missing name, *args
-      if @@shorthands[name]
-        @@shorthands[name].construct_from_shorthand name, *args
-      else
-        s = 'available shorthands: ('+@@shorthands.keys.map{|k| k.to_s}.sort * ', '+')'
-        raise NoMethodError.new "undefined method #{name} for #{self.inspect}:#{self.class} -- #{s}"
-      end
-    end
            
     module ParseTree; 
       attr_reader :status
@@ -159,7 +175,7 @@ module Hipe
       module ModuleMethods
         # a module passes this self and a symbol name 
         def register_shorthand_constructor name, klass
-          GorillaGrammar.add_shorthand name, klass
+          Grammar.register_shorthand name, klass
         end
       end
       # note 1 - we use copies of the symbols *as* parse trees
