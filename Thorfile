@@ -1,4 +1,6 @@
 # this file was originally copy-pasted from webrat's Thorfile.  Thank you Bryan Helmkamp!
+require 'ruby-debug'
+
 module GemHelpers
 
   def generate_gemspec
@@ -24,7 +26,8 @@ module GemHelpers
       repo = Git.open(".")
 
       s.files      = normalize_files(repo.ls_files.keys - repo.lib.ignored_files)
-      s.test_files = normalize_files(Dir['spec/**/*.rb'] - repo.lib.ignored_files)
+      s.test_files = normalize_files(Dir['spec/***.rb'] - repo.lib.ignored_files)
+      #s.test_files = normalize_files(Dir['spec/*.rb'] - repo.lib.ignored_files)  
 
       s.has_rdoc = 'yard'  # trying out arg[0]/lsegal's doc tool
       #s.extra_rdoc_files = %w[README.rdoc MIT-LICENSE.txt History.txt]
@@ -98,7 +101,22 @@ class Default < Thor
     Release.new.tag
     Release.new.gem
   end
+  
 end
+
+
+class Spec < Thor
+  desc "spec", "el speco"
+  def run which='all'
+    t.spec_opts = ['--options', "\"#{File.dirname(__FILE__)}/spec/spec.opts\""]
+    t.spec_files = FileList['spec/**/*_spec.rb'] + FileList['spec/**/*_spec.rb']
+    debugger
+    'x'
+    
+  end
+end
+
+
 
 class Release < Thor
   include GemHelpers
