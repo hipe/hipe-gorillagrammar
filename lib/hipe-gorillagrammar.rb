@@ -90,7 +90,6 @@ module Hipe
       end
     end
     class Grammar < Hash
-      @shorthands = {}
       class << self
         attr_reader :shorthands
       end
@@ -106,16 +105,11 @@ module Hipe
         self.instance_eval(&block)
       end
       def self.register_shorthand name, klass
-        @shorthands[name] = klass
-      end
-      def method_missing name, *args
-        if Grammar.shorthands[name]
-          Grammar.shorthands[name].construct_from_shorthand name, *args
-        else
-          #super name, *args
-          s = 'available shorthands: ('+Grammar.shorthands.keys.map{|k| k.to_s}.sort * ', '+')'
-          raise NoMethodError.new "undefined method #{name} for #{self.inspect}:#{self.class} -- #{s}"
-        end
+        instance_eval { 
+          define_method(name) { |*args|
+            klass.construct_from_shorthand(name, *args)
+          }
+        }
       end
       def []= name, symbol_data
         raise UsageFailure.new(%{Can't redefine symbols (#{name})}) if self[name]        
@@ -203,14 +197,8 @@ module Hipe
       attr_reader :status
       def is_error?; false; end
     end
-            
+
     module GorillaSymbol # @abstract base
-      module ModuleMethods
-        # a module passes this self and a symbol name 
-        def register_shorthand_constructor name, klass
-          Grammar.register_shorthand name, klass
-        end
-      end
       # note 1 - we use copies of the symbols *as* parse trees
       def copy_for_parse
         ret = Marshal.load(Marshal.dump(self))
@@ -254,10 +242,10 @@ module Hipe
 
     module RegexpTerminal
       include TerminalSymbol
-      extend GorillaSymbol::ModuleMethods
-      register_shorthand_constructor :regexp, self
+      Grammar.register_shorthand :regexp, self
       def self.construct_from_shorthand name, *args
-        self.new args
+        args[0].extend self
+        args[0]
       end
       protected
       def initialize( *args )
@@ -302,8 +290,7 @@ module Hipe
     
     class Sequence < Array
       include CanParse, NonTerminalSymbol
-      extend GorillaSymbol::ModuleMethods 
-      register_shorthand_constructor :sequence, self
+      Grammar.register_shorthand :sequence, self
       def self.construct_from_shorthand name, *args
         self.new(*args)
       end
@@ -384,12 +371,11 @@ module Hipe
 
     class RangeOf < Array
       include CanParse, NonTerminalSymbol, PipeHack
-      extend GorillaSymbol::ModuleMethods
-      register_shorthand_constructor :zero_or_more_of, self
-      register_shorthand_constructor :one_or_more_of, self
-      register_shorthand_constructor :zero_or_one_of, self
-      register_shorthand_constructor :one_of, self
-      register_shorthand_constructor :range_of, self
+      Grammar.register_shorthand :zero_or_more_of, self
+      Grammar.register_shorthand :one_or_more_of, self
+      Grammar.register_shorthand :zero_or_one_of, self
+      Grammar.register_shorthand :one_of, self
+      Grammar.register_shorthand :range_of, self
       def self.construct_from_shorthand name, *args
         self.new name, args
       end      
@@ -412,7 +398,7 @@ module Hipe
       end
       def << jobber # for PipeHack. code smell @ note 1
         if @is_parse 
-          super.<<(jobber)
+          super jobber
         else  
           @group << SymbolSet.bless(jobber)
         end
@@ -428,8 +414,12 @@ module Hipe
       end
       def to_s; inspect; end
       def pretty_print(q)
-        q.group 1, %{(#{range}).of }, '' do
-          q.pp @group
+        if @is_parse
+          super
+        else
+          q.group 1, %{(#{range}).of }, '' do
+            q.pp @group
+          end
         end
       end
       def init_for_parse

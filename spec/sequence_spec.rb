@@ -4,7 +4,7 @@ require 'hipe-gorillagrammar'
 
 module Hipe
 
-  describe GorillaGrammar, "when parsing a sequence" do
+  describe GorillaGrammar::Sequence do
    
     before(:each) do 
       @abc = Hipe.GorillaGrammar do
@@ -35,12 +35,8 @@ module Hipe
       result.message.should match(/unexpected end of input/i)      
       result.message.should match(/expecting "c"/i)
     end
- 
-  end
-  
-  describe GorillaGrammar, "when parsing integrated" do
 
-    it "should work for simple" do
+    it "should work for simple compound" do
       grammar = Hipe.GorillaGrammar do
         sequence one_or_more_of('b','e'),'c'
       end

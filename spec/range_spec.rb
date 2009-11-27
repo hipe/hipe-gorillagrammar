@@ -1,10 +1,9 @@
-# require File.expand_path(File.dirname(__FILE__) + "/../spec_helper")
 # rake spec SPEC=spec/range_spec.rb 
 require 'hipe-gorillagrammar'
 
 module Hipe
 
-  describe GorillaGrammar, "when given a list of zero input" do
+  describe GorillaGrammar::RangeOf  do
    
    it "should not allow an empty grammar" do
      lambda {
@@ -27,10 +26,6 @@ module Hipe
      result = grammar.parse []
      result.should be_a_kind_of GorillaGrammar::ParseFailure
    end
-  end
-  
-
-  describe GorillaGrammar, "when given a list of nonzero input" do
    
     it "should parse several tokens" do
       grammar = Hipe.GorillaGrammar do
