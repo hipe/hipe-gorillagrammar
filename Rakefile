@@ -17,3 +17,9 @@ Spec::Rake::SpecTask.new('rcov') do |t|
   t.rcov_opts = ['--exclude', 'spec,/Library/Ruby/Gems/1.8/gems']
 end
 
+RCov::VerifyTask.new(:rcovv => 'rcov') do |t|
+  t.threshold = 100.0
+  t.index_html = 'coverage/index.html'
+end
+
+

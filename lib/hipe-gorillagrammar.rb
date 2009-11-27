@@ -216,28 +216,28 @@ module Hipe
         @grammar = Runtime.current_grammar! # hold on to whatever grammar is active when it's defined
         @grammar_name = @grammar.name # maybe for marshal mathering
       end
-      def copy_for_parse
-        (@grammar || Runtime.instance.get_grammar(@grammar_name))[@name].copy_for_parse
-      end
+      def dereference; (@grammar || Runtime.instance.get_grammar(@grammar_name))[@name]; end
+      def copy_for_parse; dereference.copy_for_parse; end
+      def can_be_zero_length; dereference.can_be_zero_length; end
     end
     module RegexpTerminal
       include TerminalSymbol
       Grammar.register_shorthand :regexp, self
       def self.construct_from_shorthand name, *args
         args[0].extend self
-        args[0]
       end
-      def match token, peek
-        status = if (md = super(token))
-          @match_data = md.captures if peek != false
+      def init_for_parse; @is_parse = true; end
+      def inspect;   @is_parse ? %{/#{@match_data.inspect}/} : super; end
+      def [](capture_offset); @match_data[capture_offset]; end
+      def expecting; @name ? [@name] : [self.to_s]; end        
+      def match token, peek # cleaned up for note 5 @ 11/27 11:39 am
+        @status = if (md = super(token)) 
+          @match_data = (md.captures.size>0) ? md.captures : md[0]
           (:>)
         else
           (:C)
         end
-        @status = status if peek != false
-        status
       end
-      def expecting; @name ? [@name] : [self.to_s]; end
     end
     module CanParse
       def parse tokens
@@ -273,6 +273,12 @@ module Hipe
         (0..@group.size-1).each do |i|
           @group[i] = GorillaSymbol.factory @group[i]
         end
+        num = 0
+        (@group.size-1).downto(0){|i| 
+          break unless @group[i].can_be_zero_length; 
+          num += 1
+        }
+        @satisfied_at = @group.size - num
       end
       def inspect
         return super if @is_parse
@@ -287,12 +293,11 @@ module Hipe
         self << @current
         @current = nil
         @index += 1
-        if @index == @group.size
-          @group = nil
-          :>
-        else
-          :O
-        end        
+        case @index
+        when @group.size then @group = nil; :>
+        when @satisfied_at then :D
+        else :O
+        end
       end
       def expecting
         current = @current || @group[@index]
@@ -352,7 +357,7 @@ module Hipe
       def self.construct_from_shorthand name, *args
         self.new name, args
       end
-      def can_be_zero_length; @range.begin == 0; end  
+      def can_be_zero_length; @can_be_zero_length; end
       def initialize name, args
         unless args.size > 0
           raise GrammarGrammarException.new "Arguments must be non-zero length" 
@@ -368,9 +373,12 @@ module Hipe
         raise UsageFailure.new("must be range") unless @range.instance_of? Range
         # blessing the array itself will turn it into a sequence 
         @group = args
+        zero_ok = true
         (0..args.size-1).each do |i|
           @group[i] = GorillaSymbol.factory @group[i]
+          zero_ok = false unless @group[i].can_be_zero_length
         end
+        @can_be_zero_length = (@range.begin == 0 or zero_ok)
       end
       def children; @group; end # for debugging from ir
       def << jobber # for PipeHack. code smell @ note 1

@@ -14,8 +14,7 @@ class Grammar
   end 
 end
 
-
-describe 'ParseTree' do
+describe 'Regexp' do
   before :all do
     @g = Hipe.GorillaGrammar {                                                            
       :sentence[:color[/^(red|green)$/], 'beans', 'and', :food[/^salad|rice$/]]
@@ -31,3 +30,17 @@ describe 'ParseTree' do
   end
 
 end
+
+describe 'And List Grammar' do
+  before(:all){ @g = Hipe.GorillaGrammar{ :items  =~ [:item[/^.+$/], zero_or_more_of(['and', :item])]} }
+  it("uno")   { @g.parse(['abc']).is_error?.should == false                        }
+  it("uno.5") { @g.parse(['abc','and']).is_error?.should == true                   }
+  it("dos")   { @g.parse(['abc','and','def']).is_error?.should == false            }
+  it("tres")  { @g.parse(['abc','and','def','and','hij']).is_error?.should ==false }
+end
+
+
+
+
+
+
