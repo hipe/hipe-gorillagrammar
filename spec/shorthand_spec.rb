@@ -28,7 +28,7 @@ describe Hipe::GorillaGrammar, " with shorthands" do
       a[:ro01].inspect.should ==   '(0..1):["zeta"]'
       a[:ro1i].inspect.should ==   '(1..Infinity):["eta", "theta"]'
       a[:ro0i].inspect.should ==   '(0..Infinity):["iota"]'
-      a[:seq1].inspect.should ==   '["kappa", "lambda", "mu"]'
+      a[:seq1].inspect.should ==   'sequence:["kappa", "lambda", "mu"]'
       a[:rexp].inspect.should ==   '/^.$/'
   end
 
@@ -92,7 +92,7 @@ describe Hipe::GorillaGrammar, " with shorthands" do
   end
 
   it "should store symbols" do
-    sentence = Hipe.GorillaGrammar(:name=>:grammar1) {
+    ss = Hipe.GorillaGrammar(:name=>:grammar1) {
       :subject   =~ 'you'|'i'|'he'|'she'
       :verb      =~ 1.of('run','walk','blah')
       :adverb    =~ 'quickly'|'slowly'|['without', 'hesitation']

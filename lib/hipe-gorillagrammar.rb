@@ -69,19 +69,7 @@ module Hipe
       # enables the use of  =~,  ||,  (0..1).of .., .., .., and :some_name[/regexp/] in grammars
       def enable_operator_shorthands
         return if @shorthands_enabled
-        Symbol.instance_eval do 
-          include PipeHack          
-          define_method :=~ do |symbol_data|
-            return super unless Runtime.instance.current_grammar
-            Runtime.instance.current_grammar![self] = symbol_data            
-          end
-          # this is functionally equivalent to the above but w/ a different error message
-          define_method :[] do |symbol_data|
-            return super unless Runtime.instance.current_grammar            
-            Runtime.instance.current_grammar![self] = symbol_data
-          end
-          # alias_method :[], :=~ # allows for e.g. a terminal 'var' like  :first_name[/^.+$/]          
-        end
+        Symbol.instance_eval { include SymbolHack, PipeHack }
         String.instance_eval { include PipeHack }
         Fixnum.instance_eval { include FixnumOfHack }
         Range.instance_eval { include RangeOfHack }
@@ -110,10 +98,13 @@ module Hipe
           }
         }
       end
-      def []= name, symbol_data
-        raise UsageFailure.new(%{Can't redefine symbols (#{name})}) if self[name]        
-        symbol = GorillaSymbol.factory symbol_data
-        super name, symbol_data
+      def []= name, symbol
+        debugger if $stop
+        raise UsageFailure.new(%{Can't redefine symbols (#{name})}) if self[name]
+        unless symbol.kind_of? GorillaSymbol
+          raise GorillaException.new(%{Expecting GorillaSymbol had #{symbol.inspect}}) 
+        end
+        super name, symbol
       end
       #def [] name
       #end
@@ -169,12 +160,24 @@ module Hipe
         return RangeOf.new(self, args)
       end
     end
-           
+    module SymbolHack
+      def =~(symbol_data)
+        grammar = Runtime.instance.current_grammar
+        return super unless grammar
+        grammar[self] = GorillaSymbol.factory symbol_data
+      end
+      # don' alias_method below with above b/c we want the different error messages
+      # functionally equivalent to above but intended to be used inline on the right hand side
+      def [] (symbol_data)
+        grammar = Runtime.instance.current_grammar
+        return super unless grammar
+        grammar[self] = GorillaSymbol.factory symbol_data
+      end
+    end
     module ParseTree; 
       attr_reader :status
       def is_error?; false; end
     end
-
     module GorillaSymbol # @abstract base
       # This guy is the one that manages mapping builtin ruby data
       # structures to classes of symbols in our grammar thing.
@@ -183,7 +186,8 @@ module Hipe
       def self.factory obj 
         case obj
           when GorillaSymbol then obj # keep this one first!          
-          when Array         then Sequence.new(*obj)          
+          when Array         then Sequence.new(*obj)  
+                             # note RangeOf is never constructed directly with factory()
           when Symbol        then obj.extend SymbolReference
           when String        then obj.extend StringTerminal
           when Regexp        then obj.extend RegexpTerminal
@@ -292,7 +296,7 @@ module Hipe
       end
       def inspect
         return super if @is_parse
-        return @group.inspect
+        return %{sequence:#{@group.inspect}}
       end
       def to_s; inspect; end
       def init_for_parse
