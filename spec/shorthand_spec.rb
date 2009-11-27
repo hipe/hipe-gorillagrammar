@@ -92,7 +92,7 @@ describe Hipe::GorillaGrammar, " with shorthands" do
   end
 
   it "should store symbols" do
-    Hipe.GorillaGrammar(:name=>:grammar1) {
+    sentence = Hipe.GorillaGrammar(:name=>:grammar1) {
       :subject   =~ 'you'|'i'|'he'|'she'
       :verb      =~ 1.of('run','walk','blah')
       :adverb    =~ 'quickly'|'slowly'|['without', 'hesitation']
@@ -101,4 +101,5 @@ describe Hipe::GorillaGrammar, " with shorthands" do
     }
     g = Runtime.get_grammar :grammar1
   end
+  
 end

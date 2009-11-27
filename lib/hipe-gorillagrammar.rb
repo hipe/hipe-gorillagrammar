@@ -33,7 +33,6 @@ module Hipe
       g = Runtime.instance.create_grammar! opts      
       Runtime.instance.push_grammar g      
       begin
-
         g.define(&block)
       ensure
         Runtime.instance.pop_grammar        
@@ -100,7 +99,7 @@ module Hipe
         @with_operator_shorthands = opts.has_key?(:enable_operator_shorthands) ?    
           opts[:enable_operator_shorthands] : true
       end
-      def define &block
+      def define &block # note 4 - should it return grammar or last symbol?
         Runtime.enable_operator_shorthands if @with_operator_shorthands
         self.instance_eval(&block)
       end
@@ -113,7 +112,7 @@ module Hipe
       end
       def []= name, symbol_data
         raise UsageFailure.new(%{Can't redefine symbols (#{name})}) if self[name]        
-        symbol = SymbolSet.bless symbol_data
+        symbol = GorillaSymbol.factory symbol_data
         super name, symbol_data
       end
       #def [] name
@@ -170,11 +169,18 @@ module Hipe
         return RangeOf.new(self, args)
       end
     end
-    # This guy is the one that manages mapping builtin ruby data
-    # structures to classes of symbols in our grammar thing.
-    module SymbolSet # "bless" an array of symbol ruby structures
+           
+    module ParseTree; 
+      attr_reader :status
+      def is_error?; false; end
+    end
+
+    module GorillaSymbol # @abstract base
+      # This guy is the one that manages mapping builtin ruby data
+      # structures to classes of symbols in our grammar thing.
+      # bless" an array of symbol ruby structures
       # @return the original object extended or a new object
-      def self.bless obj 
+      def self.factory obj 
         case obj
           when GorillaSymbol then obj # keep this one first!          
           when Array         then Sequence.new(*obj)          
@@ -184,21 +190,7 @@ module Hipe
           else
             raise UsageFailure.new %{Can't determine symbol type for "#{obj.inspect}"},:obj=>obj
         end  
-      end
-      # remember this may be used for both lists and sets
-      def self.extend_object array
-        (0..array.size-1).each do |i|
-          array[i] = self.bless array[i]
-        end
-      end # def extend_obj
-    end # SymbolSet    
-           
-    module ParseTree; 
-      attr_reader :status
-      def is_error?; false; end
-    end
-
-    module GorillaSymbol # @abstract base
+      end            
       # note 1 - we use copies of the symbols *as* parse trees
       def copy_for_parse
         ret = Marshal.load(Marshal.dump(self))
@@ -218,9 +210,6 @@ module Hipe
   
     module StringTerminal
       include TerminalSymbol
-      def grammar_description_name
-        self
-      end
       def match token, peek
         status = (self == token) ? (:>) : (:C)
         @status = status if peek != false
@@ -297,7 +286,9 @@ module Hipe
       def initialize *args
         raise GrammarGrammarException.new "Arguments must be non-zero length" unless args.size > 0
         @group = args
-        @group.extend SymbolSet
+        (0..@group.size-1).each do |i|
+          @group[i] = GorillaSymbol.factory @group[i]
+        end
       end
       def inspect
         return super if @is_parse
@@ -362,11 +353,6 @@ module Hipe
         @status = status
       end # def match
       def initial_status; :O; end       
-      def to_native
-        self.map do |x|
-          x.to_native
-        end
-      end
     end # Sequence
 
     class RangeOf < Array
@@ -390,8 +376,11 @@ module Hipe
           else raise UsageFailure.new(%{invalid name string "#{name}"})
         end
         raise UsageFailure.new("must be range") unless @range.instance_of? Range
+        # blessing the array itself will turn it into a sequence 
         @group = args
-        @group.extend SymbolSet
+        (0..args.size-1).each do |i|
+          @group[i] = GorillaSymbol.factory @group[i]
+        end
       end
       def children # for debugging from ir
         @group
@@ -400,7 +389,7 @@ module Hipe
         if @is_parse 
           super jobber
         else  
-          @group << SymbolSet.bless(jobber)
+          @group << GorillaSymbol.factory(jobber)
         end
       end
       attr_reader :range
@@ -478,11 +467,6 @@ module Hipe
       end
       def initial_status
         @range.begin == 0 ? :D : :O
-      end
-      def to_native
-        self.map do |x|
-          x.to_native
-        end
       end
       ## @fixme this is waiting for unparse()
       def self.join list, conj1, conj2, &block
