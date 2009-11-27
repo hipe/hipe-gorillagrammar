@@ -49,10 +49,15 @@ describe Runtime do
   end  
   
   it "should work after" do
-    Hipe::GorillaGrammar.define {
-  
-    }
+    Hipe::GorillaGrammar.define { }
     Runtime.current_grammar.should == nil
   end  
-  
+
+  it "grammar can only take symbols" do
+    g = Hipe::GorillaGrammar.define { }
+    lambda{ g[:a_symbol] = :not_a_symbol }.should raise_error(
+      GorillaException, %{Expecting GorillaSymbol had :not_a_symbol}
+    )
+  end
+
 end

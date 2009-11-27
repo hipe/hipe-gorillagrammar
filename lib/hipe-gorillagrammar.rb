@@ -112,16 +112,18 @@ module Hipe
       def is_error?; true; end
     end
     class UnexpectedEndOfInput < ParseFailure; 
+      def inspect; message; end # el irbo debuggo 
       def message; <<-EOS.gsub(/^        /,'').gsub("\n",' ')
         sorry, unexpected end of input.  I was
-        expecting #{RangeOf.join(tree.expecting,', ',' or ')}.
+        expecting you to say #{RangeOf.join(tree.expecting,', ',' or ')}.
       EOS
       end
     end
-    class UnexpectedInput < ParseFailure; 
+    class UnexpectedInput < ParseFailure;
+      def inspect; message; end #just for irb debuggo
       def message; <<-EOS.gsub(/^        /,'').gsub("\n",' ')
         sorry, i don't know what you mean by "#{@info[:token]}".  I was
-        expecting #{RangeOf.join(tree.expecting,', ',' or ')}.
+        expecting you to say #{RangeOf.join(tree.expecting,', ',' or ')}.
       EOS
       end
     end
@@ -171,7 +173,6 @@ module Hipe
       # to a symbol class in our grammar thing. It's sorta like "bless" in "oop" perl
       # @return the original object extended or a new object
       def self.factory obj 
-        debugger if $stop && (($stop+=1)==2)
         case obj
           when GorillaSymbol then obj # keep this one first!          
           when Array         then Sequence.new(*obj)  
@@ -183,6 +184,7 @@ module Hipe
             raise UsageFailure.new %{Can't determine symbol type for "#{obj.inspect}"},:obj=>obj
         end  
       end
+      def can_be_zero_length; false; end
       attr_accessor :name
       def copy_for_parse # note 1 - we use copies of the symbols *as* parse trees
         ret = Marshal.load(Marshal.dump(self))
@@ -224,12 +226,6 @@ module Hipe
         args[0].extend self
         args[0]
       end
-      protected
-      def initialize( *args )
-        @grammer_description_name = args[0]
-        super args[1]
-      end
-      public
       def match token, peek
         status = if (md = self.match(token))
           @match_data = md.captures if peek != false
@@ -270,6 +266,7 @@ module Hipe
         self.new(*args)
       end
       def initialize *args
+        @index = 0 # whether or not we are a parse, we might use this to report expecting
         raise GrammarGrammarException.new "Arguments must be non-zero length" unless args.size > 0
         @group = args
         (0..@group.size-1).each do |i|
@@ -282,12 +279,12 @@ module Hipe
       end
       def to_s; inspect; end
       def init_for_parse
-        @index = 0
+        #@index = 0
         @is_parse = true
       end
       def _advance
-        self << @current_child
-        @current_child = nil
+        self << @current
+        @current = nil
         @index += 1
         if @index == @group.size
           @group = nil
@@ -297,23 +294,23 @@ module Hipe
         end        
       end
       def expecting
-        curr = @group[@index]
-        ret = curr.expecting
-        if curr.kind_of? RangeOf and curr.range.begin == 0 and @index < @group.size
-          ret |= @group[@index+1].expecting
+        current = @current || @group[@index]
+        expecting = current.expecting
+        if current.can_be_zero_length and @index < @group.size
+          expecting |= @group[@index+1].expecting
         end
-        ret
+        expecting
       end
       def match token, peek
         raise "no peeking yet" if peek == false
         begin
-          if (@current_child)
-            prev_child_status = @current_child.status
+          if (@current)
+            prev_child_status = @current.status
           else          
-            @current_child = @group[@index].copy_for_parse
+            @current = @group[@index].copy_for_parse
             prev_child_status = nil
           end
-          child_status = @current_child.match token, peek
+          child_status = @current.match token, peek
           status = case child_status
             when :>
               _advance
@@ -349,7 +346,8 @@ module Hipe
       Grammar.register_shorthand :range_of, self
       def self.construct_from_shorthand name, *args
         self.new name, args
-      end      
+      end
+      def can_be_zero_length; @range.begin == 0; end  
       def initialize name, args
         raise GrammarGrammarException.new "Arguments must be non-zero length" unless args.size > 0
         @range = name.instance_of?(Range) ? name : case name
@@ -377,7 +375,13 @@ module Hipe
       end
       attr_reader :range
       attr_accessor :pipe_hack
-      def expecting; @group.map{|x| x.expecting}.flatten; end
+      def expecting;
+        if @frame
+          @frame.map{|pair| pair[1][:obj].expecting}.flatten
+        else
+          @group.map{|x| x.expecting}.flatten; 
+        end
+      end
       def inspect
         return super if @is_parse
         return %{(#{@range.inspect}):#{@group.inspect}}
@@ -462,3 +466,4 @@ module Hipe
   end
 end
 # note 3 (resolved - we use them now) consider getting rid of unused base classes
+# note 5 peeking isn't even used at this point

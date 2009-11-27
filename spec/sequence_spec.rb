@@ -33,7 +33,7 @@ module Hipe
       result = @abc.parse(['a','b'])
       result.is_error?.should == true
       result.message.should match(/unexpected end of input/i)      
-      result.message.should match(/expecting "c"/i)
+      result.message.should match(/expecting(?: you to say) "c"/i)
     end
 
     it "should work for simple compound" do
@@ -60,7 +60,7 @@ module Hipe
        end      
        result = grammar.parse(['d'])
        result.is_error?.should == true
-       result.message.should match(/expecting "b", "e" or "c"/)
+       result.message.should match(/expecting(:? you to say)? "b", "e" or "c"/)
      end
      
      it "should handle zero or more at begin" do

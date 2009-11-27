@@ -1,9 +1,20 @@
 #rake spec SPEC=spec/shorthand_spec.rb
+require File.dirname(__FILE__)+'/helpers.rb'
 require 'hipe-gorillagrammar'
 include Hipe::GorillaGrammar
 
-describe Hipe::GorillaGrammar, " with shorthands" do
+class Grammar
+  include Helpers
+ # only for irb -- tokenize a string thru the shell.  careful!  
+  def parz str; 
+    tox = shell!(str); 
+    puts "your tokens tokenized from shell:"
+    pp tox
+    parse tox
+  end 
+end
 
+describe Hipe::GorillaGrammar, " with shorthands" do
   it "should bark on missing method" do
     lambda {
       Hipe::GorillaGrammar.define {
@@ -91,33 +102,84 @@ describe Hipe::GorillaGrammar, " with shorthands" do
     }.should raise_error(UsageFailure, %r{Can't redefine symbols \(symbol\)})
   end
 
+  it "two ways one grammar" do
+    g = Hipe.GorillaGrammar(:name =>:beuford) { :x =~ '.' }
+    Runtime.get_grammar(:beuford).should equal(g)
+  end
+
   it "should store symbols" do
-    ss = Hipe.GorillaGrammar(:name=>:grammar1) {
+    g = Hipe.GorillaGrammar(:name=>:grammar1) {
       :subject   =~ 'you'|'i'|'he'|'she'
       :verb      =~ 1.of('run','walk','blah')
       :adverb    =~ 'quickly'|'slowly'|['without', 'hesitation']
       :predicate =~ (0..1).of(:adverb, :verb, :object[/^.*$/])
       :sentence  =~ [:subject,:predicate]
     }
-    g = Runtime.get_grammar :grammar1
-    # debugger;'x'
+    g[:subject   ].inspect.should == %{(1..1):["you", "i", "he", "she"]}
+    g[:verb      ].inspect.should == %{(1..1):["run", "walk", "blah"]}
+    g[:adverb    ].inspect.should == %{(1..1):["quickly", "slowly", sequence:["without", "hesitation"]]}
+    g[:predicate ].inspect.should ==%{(0..1):[::adverb, ::verb, /^.*$/]}
+    g[:sentence  ].inspect.should ==%{sequence:[::subject, ::predicate]}
   end
   
   it "should work with symbol references" do
-    ss = Hipe.GorillaGrammar(:name=>:grammar2) {
+    g = Hipe.GorillaGrammar(:name=>:grammar2) {
       :alpha  =~ 'a'
       :beta   =~ 'b'
       :gamma  =~ 'c'
       :sentence  =~ [:alpha,:beta,:gamma]
     }
     g = Runtime.get_grammar :grammar2
-    result = ss.parse ['a','b','c']
+    result = g.parse ['a','b','c']
     result.is_error?.should == false
   end
   
-  it "should make a simple semi-useful parse tree" do
+  def go str
+    $g.parz str
+  end
     
+  it "should report expecting right at the start of a branch" do
+    g = Hipe.GorillaGrammar {
+      :sentence =~ [
+        'i','want','my', 
+         :manufacturer[1.of(['jimmy','dean'],['hickory','farms'])],
+      'sausage' ]
+    }
+    thing = g.parse ['i','want','my']
+    thing.is_error?.should == true
+    thing.should be_kind_of UnexpectedEndOfInput
+    thing.tree.expecting.should == %w("jimmy" "hickory")  # strings with quotes in them
   end
   
+  it "parse sequence 1 branch 2 x 2 x 1" do
+    g = Hipe.GorillaGrammar {
+      :sentence =~ [:manufacturer[ one_of %w(jimmy dean), %w(hickory farms) ] ]
+    }
+    thing = g.parse []
+    thing.is_error?.should == true
+    thing.should be_kind_of UnexpectedEndOfInput
+    thing.tree.expecting.should == %w("jimmy" "hickory") 
+  end  
   
+  it "parse sequence 2 branch 2 x 2 x 1" do                                              
+    g = Hipe.GorillaGrammar {                                                            
+      :sentence =~ ['want','jimmy']  
+    }                                                                                                                                                 
+    thing = g.parse ['want']                                                     
+    thing.is_error?.should == true                                                       
+    thing.should be_kind_of UnexpectedEndOfInput                                         
+    thing.tree.expecting.should == %w("jimmy")
+  end                                     
+  
+  it "parse sequence 2 branch 2 x 2 x 1" do
+    g = Hipe.GorillaGrammar {
+      :sentence =~ ['want', :manufacturer[ one_of %w(jimmy dean), %w(hickory farms) ] ]
+    }
+    $stop =1 
+    thing = g.parse ['want','jimmy']
+    thing.is_error?.should == true
+    thing.should be_kind_of UnexpectedEndOfInput
+    thing.tree.expecting.should == %w("dean") 
+  end  
+
 end
