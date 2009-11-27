@@ -1,34 +1,27 @@
 require 'rubygems'
 require 'ruby-debug'
 require 'singleton'
-
 class Symbol 
-  def satisfied?; @is_satisfied; end
-  def accepting?; @is_accepting; end
+  def satisfied?; @satisfied; end
+  def accepting?; @accepting; end
 end
-
-:D.instance_variable_set :@is_satisfied, true 
-:D.instance_variable_set :@is_accepting, true  
-:>.instance_variable_set :@is_satisfied, true 
-:>.instance_variable_set :@is_accepting, false  
-:O.instance_variable_set :@is_satisfied, false 
-:O.instance_variable_set :@is_accepting, true 
-:C.instance_variable_set :@is_satisfied, false 
-:C.instance_variable_set :@is_accepting, false  
+:D.instance_variable_set :@satisfied, true  # open mouth happy
+:D.instance_variable_set :@accepting, true  
+:>.instance_variable_set :@satisfied, true  # closed mouth happy
+:>.instance_variable_set :@accepting, false  
+:O.instance_variable_set :@satisfied, false # open mouth unhappy
+:O.instance_variable_set :@accepting, true 
+:C.instance_variable_set :@satisfied, false # closed mouth unhappy
+:C.instance_variable_set :@accepting, false  
 # absurd hack so we can use smiley faces as symbols  (note 2)
 # mouth open means "still accepting".  Smiley means "is satisfied".
-
 module Hipe
-  
   def self.GorillaGrammar opts=nil, &block
     GorillaGrammar.define(opts, &block)
   end
-  
   module GorillaGrammar
-    
     VERSION = '0.0.0'
     Infinity = 1.0 / 0
-    
     def self.define(opts=nil, &block)
       g = Runtime.instance.create_grammar! opts      
       Runtime.instance.push_grammar g      
@@ -38,7 +31,6 @@ module Hipe
         Runtime.instance.pop_grammar        
       end
     end
-
     class Runtime # for global-like stuff
       include Singleton      
       def initialize 
@@ -77,9 +69,6 @@ module Hipe
       end
     end
     class Grammar < Hash
-      class << self
-        attr_reader :shorthands
-      end
       attr_accessor :name
       def initialize opts
         opts ||= {}
@@ -87,10 +76,12 @@ module Hipe
         @with_operator_shorthands = opts.has_key?(:enable_operator_shorthands) ?    
           opts[:enable_operator_shorthands] : true
       end
-      def define &block # note 4 - should it return grammar or last symbol?
+      def define &block # should it return grammar or last symbol? (:note 4)
         Runtime.enable_operator_shorthands if @with_operator_shorthands
-        self.instance_eval(&block)
+        @last_symbol = instance_eval(&block)
+        self
       end
+      def parse tox; @last_symbol.parse tox; end
       def self.register_shorthand name, klass
         instance_eval { 
           define_method(name) { |*args|
@@ -99,15 +90,12 @@ module Hipe
         }
       end
       def []= name, symbol
-        debugger if $stop
         raise UsageFailure.new(%{Can't redefine symbols (#{name})}) if self[name]
         unless symbol.kind_of? GorillaSymbol
           raise GorillaException.new(%{Expecting GorillaSymbol had #{symbol.inspect}}) 
         end
         super name, symbol
       end
-      #def [] name
-      #end
     end
     class GorillaException < Exception
       def initialize(*args)
@@ -179,39 +167,32 @@ module Hipe
       def is_error?; false; end
     end
     module GorillaSymbol # @abstract base
-      # This guy is the one that manages mapping builtin ruby data
-      # structures to classes of symbols in our grammar thing.
-      # bless" an array of symbol ruby structures
+      # This guy is the one that manages mapping a given builtin ruby data structure
+      # to a symbol class in our grammar thing. It's sorta like "bless" in "oop" perl
       # @return the original object extended or a new object
       def self.factory obj 
+        debugger if $stop && (($stop+=1)==2)
         case obj
           when GorillaSymbol then obj # keep this one first!          
           when Array         then Sequence.new(*obj)  
                              # note RangeOf is never constructed directly with factory()
-          when Symbol        then obj.extend SymbolReference
+          when Symbol        then SymbolReference.new obj
           when String        then obj.extend StringTerminal
           when Regexp        then obj.extend RegexpTerminal
           else
             raise UsageFailure.new %{Can't determine symbol type for "#{obj.inspect}"},:obj=>obj
         end  
-      end            
-      # note 1 - we use copies of the symbols *as* parse trees
-      def copy_for_parse
+      end
+      attr_accessor :name
+      def copy_for_parse # note 1 - we use copies of the symbols *as* parse trees
         ret = Marshal.load(Marshal.dump(self))
         ret.extend ParseTree
         ret.init_for_parse if ret.respond_to? :init_for_parse
         ret
       end
     end
-    
-    module TerminalSymbol # @abstract base
-      include GorillaSymbol
-    end
-    
-    module NonTerminalSymbol # @abstract base
-      include GorillaSymbol
-    end
-  
+    module TerminalSymbol;  include GorillaSymbol; end # @abstract base
+    module NonTerminalSymbol;  include GorillaSymbol; end # @abstract base
     module StringTerminal
       include TerminalSymbol
       def match token, peek
@@ -221,18 +202,21 @@ module Hipe
       end
       def expecting; [%{"#{self}"}]; end
     end
-    
-    module SymbolReference
+    # we tried it as a module but it was acting funny. 
+    class SymbolReference
       include GorillaSymbol
-      def copy_for_parse
-        grammar.get_symbol(self).copy_for_parse
+      def inspect; %{::#{@name}}; end
+      alias_method :to_s, :inspect
+      def pp q; q.text to_s; end
+      def initialize symbol
+        @name = symbol 
+        @grammar = Runtime.current_grammar! # hold on to whatever grammar is active when it's defined
+        @grammar_name = @grammar.name # maybe for marshal mathering
       end
-      def self.extend_object symbol
-        @grammar = Runtime.current_grammar!
-        @grammar_name = @grammar.name # we store name maybe for marshalling
-      end 
+      def copy_for_parse
+        (@grammar || Runtime.instance.get_grammar(@grammar_name))[@name].copy_for_parse
+      end
     end
-
     module RegexpTerminal
       include TerminalSymbol
       Grammar.register_shorthand :regexp, self
@@ -258,7 +242,6 @@ module Hipe
       end
       def expecting; @name ? [@name] : [self.to_s]; end
     end
-
     module CanParse
       def parse tokens
         tree = self.copy_for_parse
@@ -280,7 +263,6 @@ module Hipe
         end
       end
     end
-    
     class Sequence < Array
       include CanParse, NonTerminalSymbol
       Grammar.register_shorthand :sequence, self
@@ -358,7 +340,6 @@ module Hipe
       end # def match
       def initial_status; :O; end       
     end # Sequence
-
     class RangeOf < Array
       include CanParse, NonTerminalSymbol, PipeHack
       Grammar.register_shorthand :zero_or_more_of, self
@@ -386,9 +367,7 @@ module Hipe
           @group[i] = GorillaSymbol.factory @group[i]
         end
       end
-      def children # for debugging from ir
-        @group
-      end
+      def children; @group; end # for debugging from ir
       def << jobber # for PipeHack. code smell @ note 1
         if @is_parse 
           super jobber
@@ -398,17 +377,14 @@ module Hipe
       end
       attr_reader :range
       attr_accessor :pipe_hack
-      def expecting
-        @group.map{|x| x.expecting}.flatten
-      end
+      def expecting; @group.map{|x| x.expecting}.flatten; end
       def inspect
         return super if @is_parse
         return %{(#{@range.inspect}):#{@group.inspect}}
       end
       def to_s; inspect; end
       def pretty_print(q)
-        if @is_parse
-          super
+        if @is_parse; super
         else
           q.group 1, %{(#{range}).of }, '' do
             q.pp @group
@@ -469,9 +445,7 @@ module Hipe
         @frame.delete_if {|k,v| ! v.status.accepting? }
         :O
       end
-      def initial_status
-        @range.begin == 0 ? :D : :O
-      end
+      def initial_status; @range.begin == 0 ? :D : :O ; end
       ## @fixme this is waiting for unparse()
       def self.join list, conj1, conj2, &block
         list.map!(&block) if block
@@ -487,5 +461,4 @@ module Hipe
     end # RangeOf    
   end
 end
-
 # note 3 (resolved - we use them now) consider getting rid of unused base classes

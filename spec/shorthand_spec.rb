@@ -100,6 +100,24 @@ describe Hipe::GorillaGrammar, " with shorthands" do
       :sentence  =~ [:subject,:predicate]
     }
     g = Runtime.get_grammar :grammar1
+    # debugger;'x'
   end
+  
+  it "should work with symbol references" do
+    ss = Hipe.GorillaGrammar(:name=>:grammar2) {
+      :alpha  =~ 'a'
+      :beta   =~ 'b'
+      :gamma  =~ 'c'
+      :sentence  =~ [:alpha,:beta,:gamma]
+    }
+    g = Runtime.get_grammar :grammar2
+    result = ss.parse ['a','b','c']
+    result.is_error?.should == false
+  end
+  
+  it "should make a simple semi-useful parse tree" do
+    
+  end
+  
   
 end
