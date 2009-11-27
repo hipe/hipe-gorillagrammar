@@ -1,4 +1,3 @@
-#require File.expand_path(File.dirname(__FILE__) + "/../spec_helper")
 #rake spec SPEC=spec/sequence_spec.rb 
 require 'hipe-gorillagrammar'
 
@@ -21,6 +20,20 @@ module Hipe
     it "should fail on empty input" do 
       result = @abc.parse []
       result.should be_a_kind_of GorillaGrammar::ParseFailure
+    end
+    
+    class MockyOneOff; # we couldn't use rspec for this because of marshaling
+      include GorillaGrammar::GorillaSymbol
+      def match(a,b); :/ ; end
+    end
+    
+    it "should compalin when symbol returns bad status" do
+      mok = MockyOneOff.new
+      g = Hipe.GorillaGrammar do
+       :a =~ mok
+       :sentence =~ [:a]
+     end
+     lambda{g.parse ['a','b'] }.should raise_error(GorillaGrammar::GorillaException, /bad status/)
     end
    
     it "should parse a simple one" do

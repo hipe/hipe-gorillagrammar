@@ -22,6 +22,14 @@ describe Hipe::GorillaGrammar, " with shorthands" do
       }
     }.should raise_error(NameError)
   end
+  
+  it "should bark when undefined rangeof method" do
+    Grammar.register_shorthand :nonexistant_method, RangeOf
+    lambda{ 
+      Hipe.GorillaGrammar{ nonexistant_method('x') }
+    }.should raise_error(UsageFailure, /invalid name str/)
+  end
+  
 
   it "every one should construct" do
     a = {}

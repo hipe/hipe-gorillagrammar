@@ -158,10 +158,10 @@ module Hipe
       end
       # don' alias_method below with above b/c we want the different error messages
       # functionally equivalent to above but intended to be used inline on the right hand side
-      def [] (symbol_data)
+      def [] (*symbol_data)
         grammar = Runtime.instance.current_grammar
         return super unless grammar
-        grammar[self] = GorillaSymbol.factory symbol_data
+        grammar[self] = GorillaSymbol.factory(symbol_data.count > 1 ? symbol_data : symbol_data[0])
       end
     end
     module ParseTree; 
@@ -197,6 +197,7 @@ module Hipe
     module NonTerminalSymbol;  include GorillaSymbol; end # @abstract base
     module StringTerminal
       include TerminalSymbol
+      include ParseTree
       def match token, peek
         status = (self == token) ? (:>) : (:C)
         @status = status if peek != false
@@ -227,7 +228,7 @@ module Hipe
         args[0]
       end
       def match token, peek
-        status = if (md = self.match(token))
+        status = if (md = super(token))
           @match_data = md.captures if peek != false
           (:>)
         else
@@ -337,6 +338,10 @@ module Hipe
       end # def match
       def initial_status; :O; end       
     end # Sequence
+    class MoreOneOff
+      Grammar.register_shorthand :more, self
+      def self.construct_from_shorthand(a,*b); Infinity; end
+    end
     class RangeOf < Array
       include CanParse, NonTerminalSymbol, PipeHack
       Grammar.register_shorthand :zero_or_more_of, self
@@ -349,7 +354,9 @@ module Hipe
       end
       def can_be_zero_length; @range.begin == 0; end  
       def initialize name, args
-        raise GrammarGrammarException.new "Arguments must be non-zero length" unless args.size > 0
+        unless args.size > 0
+          raise GrammarGrammarException.new "Arguments must be non-zero length" 
+        end
         @range = name.instance_of?(Range) ? name : case name
           when :zero_or_more_of then (0..Infinity)
           when :one_or_more_of then (1..Infinity)
@@ -444,10 +451,6 @@ module Hipe
             init_for_parse unless is_peek
             :O
         end
-      end
-      def _prune
-        @frame.delete_if {|k,v| ! v.status.accepting? }
-        :O
       end
       def initial_status; @range.begin == 0 ? :D : :O ; end
       ## @fixme this is waiting for unparse()
