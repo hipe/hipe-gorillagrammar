@@ -42,13 +42,18 @@ describe Hipe::GorillaGrammar, " with shorthands" do
       a[:seq1] = sequence(         'kappa','lambda','mu')             
       a[:rexp] = regexp(           /^.$/)                           
     }                              
-      a[:ro56].inspect.should ==   '(5..6):["alpha", "beta", "gamma"]'
-      a[:ro11].inspect.should ==   '(1..1):["delta", "epsilon"]'
-      a[:ro01].inspect.should ==   '(0..1):["zeta"]'
-      a[:ro1i].inspect.should ==   '(1..Infinity):["eta", "theta"]'
-      a[:ro0i].inspect.should ==   '(0..Infinity):["iota"]'
-      a[:seq1].inspect.should ==   'sequence:["kappa", "lambda", "mu"]'
-      a[:rexp].inspect.should ==   '/^.$/'
+    a[:ro56].group.should ==   ["alpha","beta","gamma"]
+    a[:ro56].range.should == (5..6)
+    a[:ro11].group.should ==   ["delta","epsilon"]
+    a[:ro11].range.should == (1..1)
+    a[:ro01].group.should ==   ['zeta']                    
+    a[:ro01].range.should == (0..1)
+    a[:ro1i].group.should ==   ['eta','theta']
+    a[:ro1i].range.should == (1..Infinity)
+    a[:ro0i].group.should ==   ['iota']
+    a[:ro01].range.should == (0..1)           
+    a[:seq1].group.should ==   ['kappa','lambda','mu']
+    a[:rexp].should ==   /^.$/      
   end
 
   it "should turn pipe into RangeOf" do
@@ -76,21 +81,23 @@ describe Hipe::GorillaGrammar, " with shorthands" do
   end
 
   it "different kind of pipies should be equal " do
+    range_of_1=range_of_2=range_of_3=range_of_4=range_of_5=target=nil
     g = Hipe.GorillaGrammar {
       range_of_1 = 1.of 'you','i','he'
       range_of_2 = 'you' | 'i' | 'he'
       range_of_3 = (1..1).of 'you','i','he'
       range_of_4 = range_of 1..1, 'you','i','he'
       range_of_5 = one_of 'you', 'i', 'he'
-      target = RangeOf.new(1..1, ['you','i','he'])
-      target_str = target.inspect
-      target_str.should == %{(1..1):["you", "i", "he"]}
-      range_of_1.inspect.should == target_str
-      range_of_2.inspect.should == target_str
-      range_of_3.inspect.should == target_str
-      range_of_4.inspect.should == target_str
-      range_of_5.inspect.should == target_str
+      :main =~ ['']
     }
+    target = RangeOf.new(1..1, ['you','i','he'])
+    target_str = target.inspect
+    target_str.should match(/.{11}/)
+    range_of_1.inspect.should == target_str
+    range_of_2.inspect.should == target_str
+    range_of_3.inspect.should == target_str
+    range_of_4.inspect.should == target_str
+    range_of_5.inspect.should == target_str    
   end
 
   it "should complain on bad symbol" do
@@ -107,7 +114,7 @@ describe Hipe::GorillaGrammar, " with shorthands" do
         :symbol =~ ['this']
         :symbol =~ ['this']
       }
-    }.should raise_error(UsageFailure, %r{Can't redefine symbols \(symbol\)})
+    }.should raise_error(GrammarGrammarException, %r{can't redefine symbol}i)
   end
 
   it "two ways one grammar" do
@@ -123,11 +130,11 @@ describe Hipe::GorillaGrammar, " with shorthands" do
       :predicate =~ (0..1).of(:adverb, :verb, :object[/^.*$/])
       :sentence  =~ [:subject,:predicate]
     }
-    g[:subject   ].inspect.should == %{(1..1):["you", "i", "he", "she"]}
-    g[:verb      ].inspect.should == %{(1..1):["run", "walk", "blah"]}
-    g[:adverb    ].inspect.should == %{(1..1):["quickly", "slowly", sequence:["without", "hesitation"]]}
-    g[:predicate ].inspect.should ==%{(0..1):[::adverb, ::verb, /^.*$/]}
-    g[:sentence  ].inspect.should ==%{sequence:[::subject, ::predicate]}
+    g[:subject   ].inspect.should match /1.*1.*you.*i.*he.*she/
+    g[:verb      ].inspect.should match /1.*1.*run.*walk.*blah/
+    g[:adverb    ].inspect.should match /1.*1.*quickly.*slowly.*without.*hesitation/
+    g[:predicate ].inspect.should match /0.*1.*adverb.*verb.*object/
+    g[:sentence  ].inspect.should match /subject.*predicate/
   end
   
   it "should work with symbol references" do
@@ -137,15 +144,10 @@ describe Hipe::GorillaGrammar, " with shorthands" do
       :gamma  =~ 'c'
       :sentence  =~ [:alpha,:beta,:gamma]
     }
-    g = Runtime.get_grammar :grammar2
     result = g.parse ['a','b','c']
     result.is_error?.should == false
   end
   
-  def go str
-    $g.parz str
-  end
-    
   it "should report expecting right at the start of a branch" do
     g = Hipe.GorillaGrammar {
       :sentence =~ [

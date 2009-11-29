@@ -28,6 +28,7 @@ describe Runtime do
     g = nil     
     Hipe::GorillaGrammar.define {
       g = Runtime.current_grammar!
+      ['']
     }
     g.should be_an_instance_of Grammar
   end
@@ -36,6 +37,7 @@ describe Runtime do
     g = nil
     Hipe::GorillaGrammar.define {
       g = Runtime.current_grammar
+      ['']      
     }
     g.should be_an_instance_of Grammar     
   end
@@ -44,17 +46,18 @@ describe Runtime do
     lambda{
       Hipe::GorillaGrammar.define {
         Hipe::GorillaGrammar.define {}
+        ['']        
       }
     }.should raise_error(UsageFailure)
   end  
   
   it "should work after" do
-    Hipe::GorillaGrammar.define { }
+    Hipe::GorillaGrammar.define {['']}
     Runtime.current_grammar.should == nil
   end  
 
   it "grammar can only take symbols" do
-    g = Hipe::GorillaGrammar.define { }
+    g = Hipe::GorillaGrammar.define {['']}
     lambda{ g[:a_symbol] = :not_a_symbol }.should raise_error(
       GorillaException, %{Expecting GorillaSymbol had :not_a_symbol}
     )

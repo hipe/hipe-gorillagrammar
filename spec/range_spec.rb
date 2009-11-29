@@ -37,13 +37,11 @@ module Hipe
     it "should pp as a grammar" do
       g = Hipe.GorillaGrammar { :sammy =~ (1..more).of('a','b','c') }
       PP.pp(g,x='')
-      x.should == %|{:sammy=>(1..Infinity).of ["a", "b", "c"]}\n|
+      x.should match %r|sammy.*1\.\..*"a".*"b".*"c"|m
     end
     
     it "is unlikely to have a minimum of two or more" do 
-      Hipe.GorillaGrammar { 
-        (2..more).of('jon','ringo','george','paul').parse(['jon','ringo']).is_error?.should == false
-      }
+      Hipe.GorillaGrammar{(2..more).of('jon','ringo','george','paul')}.parse(['jon','ringo']).is_error?.should == false
     end
   end  # when given non-zero
 end

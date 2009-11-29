@@ -86,7 +86,7 @@ module Hipe
         Runtime.enable_operator_shorthands if @with_operator_shorthands
         @last_symbol = GorillaSymbol.factory instance_eval(&block) # allows anonymous ranges & sequences as grammr
         @last_symbol = @last_symbol.dereference if @last_symbol.instance_of? SymbolReference
-        self[@last_symbol.name = ''] = @last_symbol if (@last_symbol.name.nil?)
+        self[@last_symbol.name = '__main__'] = @last_symbol if (@last_symbol.name.nil?)
         self
       end
       def parse tox; @last_symbol.parse tox; end
@@ -222,9 +222,10 @@ module Hipe
       def [] (i); super(i) ? super(i) : @group[i]; end
       def size; kind_of?(ParseTree) ? super : @group.size; end 
       def == other
-        kind_of?(ParseTree) ? super.==(other) :
-        other.class == self.class && @name == @name and @group == other.group and super(other) == other; end
-      protected; attr_reader :group; public
+        kind_of?(ParseTree) ? builtin_equality(other) : 
+        (other.class == self.class && @name == @name and @group == other.group)
+      end
+      attr_reader :group;
       def _inspect left, right, name = nil
         name = %{:#{@name}} if name.nil? and @name
         [name, left, 
@@ -295,8 +296,9 @@ module Hipe
         @grammar_name = Runtime.current_grammar!.name 
       end
       def dereference; (@grammar || Runtime.instance.get_grammar(@grammar_name))[@name]; end
-      def create_empty_parse_tree; dereference.create_empty_parse_tree; end
-      def can_be_zero_length; dereference.can_be_zero_length; end
+      [:create_empty_parse_tree, :can_be_zero_length, :expecting].each do |name|
+        define_method(name){ dereference.send(name) }
+      end      
     end
     module CanParse
       def parse tokens
@@ -304,6 +306,7 @@ module Hipe
         if tokens.size == 0 # special case -- parsing empty input
           status = tree.initial_status
         else
+          token = nil # we want it to be scoped out here so it can be used below
           tokens.each_with_index do |token, i|
             status = tree.match token, tokens[i+1]
             break unless status.accepting?
@@ -319,6 +322,7 @@ module Hipe
       end
     end
     class Sequence < Array
+      alias_method :builtin_equality, :==
       include CanParse, NonTerminalSymbol
       Grammar.register_shorthand :sequence, self
       def self.construct_from_shorthand(name, *args); self.new(*args); end 
@@ -382,6 +386,7 @@ module Hipe
       def self.construct_from_shorthand(a,*b); Infinity; end
     end
     class RangeOf < Array
+      alias_method :builtin_equality, :==
       include CanParse, NonTerminalSymbol, PipeHack
       [:zero_or_more_of,:one_or_more_of,:zero_or_one_of,:one_of,:range_of].each do |name|
         Grammar.register_shorthand name, self
