@@ -129,10 +129,10 @@ module Hipe
       end
     end
     class UnexpectedInput < ParseFailure;
-      def message; <<-EOS.gsub(/^        /,'').gsub("\n",' ')
-        sorry, i don't know what you mean by "#{@info[:token]}".  I was
-        expecting you to say #{RangeOf.join(tree.expecting,', ',' or ')}.
-      EOS
+      def message
+        %{sorry, i don't know what you mean by "#{@info[:token]}".  } + 
+        ((ex = tree.expecting.uniq).size == 0 ? %{i wasn't expecting any more input.} :
+        %{i was expecting you to say #{RangeOf.join(ex,', ',' or ')}.})
       end
     end
     module PipeHack
@@ -297,21 +297,22 @@ module Hipe
     module CanParse
       def parse tokens
         tree = self.create_empty_parse_tree
+        result = nil
         if tokens.size == 0 # special case -- parsing empty input
           status = tree.initial_status
         else
-          token = nil # we want it to be scoped out here so it can be used below
+          token = nil; i = 0; # we want it to be scoped out here so it can be used below
           tokens.each_with_index do |token, i|
             status = tree.match token, tokens[i+1]
             break unless status.accepting?
           end
         end
-        if (status.satisfied?)
-          tree.prune! # pruning here should not be guaranteed, but note it does final advancing
-        elsif (status.accepting?)
+        if tokens.size > 0 && i < (tokens.size-1)
+          UnexpectedInput.new :token=>tokens[i+1], :tree=>tree.prune!   
+        elsif ! status.satisfied?
           UnexpectedEndOfInput.new :tree=>tree
-        else
-          UnexpectedInput.new :token=>token, :tree=>tree
+        else          
+          tree.prune! # pruning here should not be guaranteed, but note it does final advancing
         end
       end
     end
@@ -360,7 +361,7 @@ module Hipe
           @current ||= @group[@index].create_empty_parse_tree
           child_status = @current.match token, peek
           status = case child_status
-          when :> then _advance
+          when :> then _advance 
           when :O then :O              
           when :D then (@index>=@satisfied_at) ? :D : :O                                        
           when :C 
@@ -417,7 +418,7 @@ module Hipe
       end
       def expecting;
         @frame ? @frame.map{|pair| pair[1][:obj].expecting}.flatten : 
-        @group.map{|x| x.expecting}.flatten; 
+        @group ? @group.map{|x| x.expecting}.flatten : []
       end
       def inspect; 
         _inspect '(',')',[@name ? %{:#{@name}} : nil , '(', @range.to_s.gsub('..Infinity',' or more'),'):'].compact.join
@@ -487,4 +488,4 @@ end
 # note 3 (resolved - we use them now) consider getting rid of unused base classes
 # note 5 peeking isn't even used at this point
 # note 6 you might use to_s for unparse
-# note 7 todo: descention from regexp to string or vice versa
+# note 7 todo: descention from regexp to string or vice versa,
