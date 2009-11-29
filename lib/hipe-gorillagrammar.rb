@@ -1,20 +1,22 @@
 require 'rubygems'
 require 'ruby-debug'
 require 'singleton'
+require 'orderedhash'
 class Symbol 
   def satisfied?; @satisfied; end
   def accepting?; @accepting; end
 end
+# these are the different states that a parsing node can have
+# after it's consumed a token. absurd hack so we can use smiley faces as symbols  (note 2)
+# mouth open means "still accepting".  Smiley means "is satisfied".
 :D.instance_variable_set :@satisfied, true  # open mouth happy
-:D.instance_variable_set :@accepting, true  
+:D.instance_variable_set :@accepting, true 
 :>.instance_variable_set :@satisfied, true  # closed mouth happy
-:>.instance_variable_set :@accepting, false  
+:>.instance_variable_set :@accepting, false 
 :O.instance_variable_set :@satisfied, false # open mouth unhappy
 :O.instance_variable_set :@accepting, true 
 :C.instance_variable_set :@satisfied, false # closed mouth unhappy
-:C.instance_variable_set :@accepting, false  
-# absurd hack so we can use smiley faces as symbols  (note 2)
-# mouth open means "still accepting".  Smiley means "is satisfied".
+:C.instance_variable_set :@accepting, false 
 module Hipe
   def self.GorillaGrammar opts=nil, &block
     GorillaGrammar.define(opts, &block)
@@ -23,16 +25,17 @@ module Hipe
     VERSION = '0.0.0'
     Infinity = 1.0 / 0
     def self.define(opts=nil, &block)
-      g = Runtime.instance.create_grammar! opts      
-      Runtime.instance.push_grammar g      
+      runtime = Runtime.instance
+      g = runtime.create_grammar! opts 
+      runtime.push_grammar g 
       begin
         g.define(&block)
       ensure
-        Runtime.instance.pop_grammar        
+        runtime.pop_grammar 
       end
     end
     class Runtime # for global-like stuff
-      include Singleton      
+      include Singleton
       def initialize 
         @grammar_stack = []
         @grammars = {}
@@ -53,8 +56,9 @@ module Hipe
       end
       def create_grammar! opts
         opts ||= {}
-        raise GorillaException.new("for now we can't reopen grammars") if opts[:name] && @grammars[opts[:name]]
-        g = Grammar.new opts
+        g = Grammar.new opts 
+        g.name = %{grammar#{@grammars.size+1}} unless g.name
+        raise GorillaException.new("for now we can't reopen grammars") if @grammars[g.name]
         @grammars[g.name] = g
       end
       def get_grammar name; @grammars[name]; end
@@ -65,20 +69,24 @@ module Hipe
         String.instance_eval { include PipeHack }
         Fixnum.instance_eval { include FixnumOfHack }
         Range.instance_eval { include RangeOfHack }
-        @shorthands_enabled = true     
+        @shorthands_enabled = true 
       end
     end
     class Grammar < Hash
-      attr_accessor :name
-      def initialize opts
+      attr_accessor :name, :last_symbol
+      alias_method :names, :keys
+      def initialize opts 
         opts ||= {}
-        @name = opts[:name] || %{grammar#{self.object_id}}
-        @with_operator_shorthands = opts.has_key?(:enable_operator_shorthands) ?    
+        @name = opts[:name] if opts[:name]
+        @with_operator_shorthands = opts.has_key?(:enable_operator_shorthands) ? 
           opts[:enable_operator_shorthands] : true
       end
-      def define &block # should it return grammar or last symbol? (:note 4)
+      def == other; s1,s2='',''; PP.pp(self,s1); PP.pp(other,s2); return s1==s2; end #hack
+      def define &block # should it return grammar or last symbol? grammar. (note 4:)
         Runtime.enable_operator_shorthands if @with_operator_shorthands
-        @last_symbol = instance_eval(&block)
+        @last_symbol = GorillaSymbol.factory instance_eval(&block) # allows anonymous ranges & sequences as grammr
+        @last_symbol = @last_symbol.dereference if @last_symbol.instance_of? SymbolReference
+        self[@last_symbol.name = ''] = @last_symbol if (@last_symbol.name.nil?)
         self
       end
       def parse tox; @last_symbol.parse tox; end
@@ -90,29 +98,30 @@ module Hipe
         }
       end
       def []= name, symbol
-        raise UsageFailure.new(%{Can't redefine symbols (#{name})}) if self[name]
+        raise GrammarGrammarException.new(%{Can't redefine symbols. Multiple definitions for :#{name}}) if self[name]
         unless symbol.kind_of? GorillaSymbol
           raise GorillaException.new(%{Expecting GorillaSymbol had #{symbol.inspect}}) 
         end
+        symbol.name = name
         super name, symbol
       end
     end
     class GorillaException < Exception
       def initialize(*args)
-        super args.shift if args[0].instance_of? String  
+        super args.shift if args[0].instance_of? String 
         @info = args.last.instance_of?(Hash) ? args.pop : {}
         @extra = args.count > 0 ? args : []
       end
       def tree; @info[:tree]; end
     end
     class UsageFailure < GorillaException; end
-    class GrammarGrammarException < UsageFailure; end    
+    class GrammarGrammarException < UsageFailure; end 
     class AmbiguousGrammar < GrammarGrammarException; end
     class ParseFailure < GorillaException
       def is_error?; true; end
+      def inspect; message; end # just for irb debugo 
     end
     class UnexpectedEndOfInput < ParseFailure; 
-      def inspect; message; end # el irbo debuggo 
       def message; <<-EOS.gsub(/^        /,'').gsub("\n",' ')
         sorry, unexpected end of input.  I was
         expecting you to say #{RangeOf.join(tree.expecting,', ',' or ')}.
@@ -120,7 +129,6 @@ module Hipe
       end
     end
     class UnexpectedInput < ParseFailure;
-      def inspect; message; end #just for irb debuggo
       def message; <<-EOS.gsub(/^        /,'').gsub("\n",' ')
         sorry, i don't know what you mean by "#{@info[:token]}".  I was
         expecting you to say #{RangeOf.join(tree.expecting,', ',' or ')}.
@@ -130,12 +138,12 @@ module Hipe
     module PipeHack
       def |(other)
         if self.instance_of? RangeOf
-          raise UsageFailure("no") unless self.pipe_hack
+          raise UsageFailure("no") unless self.is_pipe_hack
           self << other
           ret = self
         else 
           ret = RangeOf.new((1..1),[self,other])
-          ret.pipe_hack = true
+          ret.is_pipe_hack = true
         end
         ret
       end
@@ -151,17 +159,15 @@ module Hipe
       end
     end
     module SymbolHack
-      def =~(symbol_data)
-        grammar = Runtime.instance.current_grammar
-        return super unless grammar
+      def =~ (symbol_data)
+        return super unless ( grammar = Runtime.instance.current_grammar )
         grammar[self] = GorillaSymbol.factory symbol_data
       end
-      # don' alias_method below with above b/c we want the different error messages
-      # functionally equivalent to above but intended to be used inline on the right hand side
       def [] (*symbol_data)
-        grammar = Runtime.instance.current_grammar
-        return super unless grammar
-        grammar[self] = GorillaSymbol.factory(symbol_data.count > 1 ? symbol_data : symbol_data[0])
+        return super unless Runtime.instance.current_grammar 
+        symbol_data = symbol_data[0] if symbol_data.size == 1
+        new_symbol = self.=~(symbol_data)
+        return SymbolReference.new self
       end
     end
     module ParseTree; 
@@ -169,56 +175,97 @@ module Hipe
       def is_error?; false; end
     end
     module GorillaSymbol # @abstract base
-      # This guy is the one that manages mapping a given builtin ruby data structure
-      # to a symbol class in our grammar thing. It's sorta like "bless" in "oop" perl
-      # @return the original object extended or a new object
-      def self.factory obj 
+      # @return the original object extended or a new object. maps data structures to symbols
+      def self.factory obj
         case obj
-          when GorillaSymbol then obj # keep this one first!          
-          when Array         then Sequence.new(*obj)  
+          when GorillaSymbol then obj # keep this one first! 
+          when Array         then Sequence.new(*obj) 
                              # note RangeOf is never constructed directly with factory()
           when Symbol        then SymbolReference.new obj
           when String        then obj.extend StringTerminal
           when Regexp        then obj.extend RegexpTerminal
           else
             raise UsageFailure.new %{Can't determine symbol type for "#{obj.inspect}"},:obj=>obj
-        end  
+        end 
       end
       def can_be_zero_length; false; end
       attr_accessor :name
-      def copy_for_parse # note 1 - we use copies of the symbols *as* parse trees
-        ret = Marshal.load(Marshal.dump(self))
+      def create_empty_parse_tree # we use copies of the symbols *as* parse trees (note 1:)
+        ret = Marshal.load Marshal.dump(self)
         ret.extend ParseTree
         ret.init_for_parse if ret.respond_to? :init_for_parse
         ret
       end
+      def prune!
+        (%w(@index @satisfied_at @group @status @frame @stop_here) & instance_variables).each{|x|
+          instance_variable_set x, nil
+        }
+        self
+      end
     end
-    module TerminalSymbol;  include GorillaSymbol; end # @abstract base
-    module NonTerminalSymbol;  include GorillaSymbol; end # @abstract base
-    module StringTerminal
+    module TerminalSymbol;
+      include GorillaSymbol;
+      attr_accessor :tree, :consumed_token
+      def inspect; [@name ? @name.inspect : nil, super, %{(#{@consumed_token ? '.' : '_' })}].compact.join; end
+      def pretty_print q
+        q.text inspect
+        q.group 1,'{','}' do         
+          instance_variables.sort.each do |n|
+            next if instance_variable_get(n).nil?
+            q.text %{#{n}=}; q.pp instance_variable_get(n); q.text(';'); q.breakable 
+          end
+        end
+      end        
+    end
+    module NonTerminalSymbol; 
+      include GorillaSymbol;
+      def [] (i); super(i) ? super(i) : @group[i]; end
+      def size; kind_of?(ParseTree) ? super : @group.size; end 
+      def == other
+        kind_of?(ParseTree) ? super.==(other) :
+        other.class == self.class && @name == @name and @group == other.group and super(other) == other; end
+      protected; attr_reader :group; public
+      def _inspect left, right, name = nil
+        name = %{:#{@name}} if name.nil? and @name
+        [name, left, 
+          (0..(@group ? @group.size : self.size)-1).map{|i| (self[i] ? self[i] : @group[i]).inspect}.join(', '),
+        right ].compact.join
+      end
+      def pretty_print q
+        names = instance_variables.sort
+        names.delete('@group') 
+        names.push('@group')
+        names.delete_if{|x| instance_variable_get(x).nil?} # it may have been pruned
+        q.group 1,'{','}' do 
+          # show any non-nil properties of this object
+          names.each do |name|
+            q.text %{#{name}:}
+            q.pp instance_variable_get(name)
+            q.breakable
+          end
+          # show any captured children of this object (if it's parsed something)
+          each_with_index do |child, i|
+            q.text %{#{i}=>}
+            q.pp child
+            q.breakable
+          end 
+        end
+      end 
+    end
+    module StringTerminal # this could also be considered a special case of regexp terminal
       include TerminalSymbol
-      include ParseTree
       def match token, peek
-        status = (self == token) ? (:>) : (:C)
+        status = if (self==token) 
+          @consumed_token = token
+          @tree = token
+          (:>)          
+        else
+          (:C)
+        end
         @status = status if peek != false
         status
       end
       def expecting; [%{"#{self}"}]; end
-    end
-    # we tried it as a module but it was acting funny. 
-    class SymbolReference
-      include GorillaSymbol
-      def inspect; %{::#{@name}}; end
-      alias_method :to_s, :inspect
-      def pp q; q.text to_s; end
-      def initialize symbol
-        @name = symbol 
-        @grammar = Runtime.current_grammar! # hold on to whatever grammar is active when it's defined
-        @grammar_name = @grammar.name # maybe for marshal mathering
-      end
-      def dereference; (@grammar || Runtime.instance.get_grammar(@grammar_name))[@name]; end
-      def copy_for_parse; dereference.copy_for_parse; end
-      def can_be_zero_length; dereference.can_be_zero_length; end
     end
     module RegexpTerminal
       include TerminalSymbol
@@ -226,33 +273,44 @@ module Hipe
       def self.construct_from_shorthand name, *args
         args[0].extend self
       end
-      def init_for_parse; @is_parse = true; end
-      def inspect;   @is_parse ? %{/#{@match_data.inspect}/} : super; end
-      def [](capture_offset); @match_data[capture_offset]; end
-      def expecting; @name ? [@name] : [self.to_s]; end        
+      def [](capture_offset); @tree[capture_offset]; end
+      def expecting; @name ? [@name] : [self.inspect]; end 
       def match token, peek # cleaned up for note 5 @ 11/27 11:39 am
         @status = if (md = super(token)) 
-          @match_data = (md.captures.size>0) ? md.captures : md[0]
+          @tree = (md.captures.size>0) ? md.captures : md[0]
+          @consumed_token = token
           (:>)
         else
           (:C)
         end
       end
+    end    
+    # we tried it as a module but it was acting funny. 
+    class SymbolReference
+      include GorillaSymbol
+      def inspect; %{::#{@name}}; end
+      def pp q; q.text(inspect); end
+      def initialize symbol
+        @name = symbol 
+        @grammar_name = Runtime.current_grammar!.name 
+      end
+      def dereference; (@grammar || Runtime.instance.get_grammar(@grammar_name))[@name]; end
+      def create_empty_parse_tree; dereference.create_empty_parse_tree; end
+      def can_be_zero_length; dereference.can_be_zero_length; end
     end
     module CanParse
       def parse tokens
-        tree = self.copy_for_parse
-        if tokens.size == 0 # special case -- parsing the empty string
+        tree = self.create_empty_parse_tree
+        if tokens.size == 0 # special case -- parsing empty input
           status = tree.initial_status
-        else       
-          token = nil 
+        else
           tokens.each_with_index do |token, i|
             status = tree.match token, tokens[i+1]
             break unless status.accepting?
           end
         end
         if (status.satisfied?)
-          tree
+          tree.prune! # pruning here should not be guaranteed
         elsif (status.accepting?)
           UnexpectedEndOfInput.new :tree=>tree
         else
@@ -263,37 +321,24 @@ module Hipe
     class Sequence < Array
       include CanParse, NonTerminalSymbol
       Grammar.register_shorthand :sequence, self
-      def self.construct_from_shorthand name, *args
-        self.new(*args)
-      end
+      def self.construct_from_shorthand(name, *args); self.new(*args); end 
       def initialize *args
-        @index = 0 # whether or not we are a parse, we might use this to report expecting
+        @index = 0 # we use this to report expecting whether or not we are a parse
         raise GrammarGrammarException.new "Arguments must be non-zero length" unless args.size > 0
-        @group = args
-        (0..@group.size-1).each do |i|
-          @group[i] = GorillaSymbol.factory @group[i]
-        end
-        num = 0
-        (@group.size-1).downto(0){|i| 
-          break unless @group[i].can_be_zero_length; 
-          num += 1
-        }
-        @satisfied_at = @group.size - num
+        @group = args.map{|x| GorillaSymbol.factory x }
+        num = @group.reverse.map{|x| x.can_be_zero_length}.find_index(false) || @group.size
+        @satisfied_at = @group.size - num # trailing children that can be zero length affect when we are satisfied.
       end
-      def inspect
-        return super if @is_parse
-        return %{sequence:#{@group.inspect}}
+      # code smells below -- maybe a parse, maybe not (:note 1)
+      def initial_status; :O; end 
+      def init_for_parse; 
+        @stop_here = (@group.size-1);  
       end
-      def to_s; inspect; end
-      def init_for_parse
-        #@index = 0
-        @is_parse = true
-      end
+      def inspect; _inspect '[',']'; end
       def _advance
-        self << @current
+        self << @current.prune!
         @current = nil
-        @index += 1
-        case @index
+        case (@index += 1)
         when @group.size then @group = nil; :>
         when @satisfied_at then :D
         else :O
@@ -308,40 +353,29 @@ module Hipe
         expecting
       end
       def match token, peek
-        raise "no peeking yet" if peek == false
-        begin
-          if (@current)
-            prev_child_status = @current.status
-          else          
-            @current = @group[@index].copy_for_parse
-            prev_child_status = nil
-          end
+        while true
+          prev_child_status = @current ? @current.status : nil
+          @current ||= @group[@index].create_empty_parse_tree
           child_status = @current.match token, peek
           status = case child_status
-            when :>
-              _advance
-            when :C 
-              if prev_child_status != :D
-                :C
-              else
-                resp = _advance
-                if resp == :>
-                  :>
-                else  # re-run the token against next child
-                  next
-                end
+          when :> then _advance
+          when :O then :O              
+          when :D then (@index>=@satisfied_at) ? :D : :O                                        
+          when :C 
+            if prev_child_status != :D then :C
+            else
+              case _advance
+              when :> then :>
+              else; next # we are :D or :0 re-run the same token against next child
               end
-            when :O then :O
-            when :D 
-              (@index==@group.size-1) ? :D : :O
-            else 
-              raise GorillaException.new('symbol returned bad status')
+            end
+          else 
+            raise GorillaException.new('symbol returned bad status')
           end # case
-          break;
-        end while true
+          break; # break out of infinite loop
+        end # infinite loop
         @status = status
       end # def match
-      def initial_status; :O; end       
     end # Sequence
     class MoreOneOff
       Grammar.register_shorthand :more, self
@@ -349,47 +383,34 @@ module Hipe
     end
     class RangeOf < Array
       include CanParse, NonTerminalSymbol, PipeHack
-      Grammar.register_shorthand :zero_or_more_of, self
-      Grammar.register_shorthand :one_or_more_of, self
-      Grammar.register_shorthand :zero_or_one_of, self
-      Grammar.register_shorthand :one_of, self
-      Grammar.register_shorthand :range_of, self
-      def self.construct_from_shorthand name, *args
-        self.new name, args
+      [:zero_or_more_of,:one_or_more_of,:zero_or_one_of,:one_of,:range_of].each do |name|
+        Grammar.register_shorthand name, self
       end
-      def can_be_zero_length; @can_be_zero_length; end
+      def self.construct_from_shorthand name, *args; self.new name, args; end
       def initialize name, args
         unless args.size > 0
           raise GrammarGrammarException.new "Arguments must be non-zero length" 
         end
         @range = name.instance_of?(Range) ? name : case name
-          when :zero_or_more_of then (0..Infinity)
-          when :one_or_more_of then (1..Infinity)
-          when :zero_or_one_of then (0..1)
-          when :one_of then (1..1)
-          when :range_of then @range = args.shift
+          when :zero_or_more_of  then (0..Infinity)
+          when :one_or_more_of   then (1..Infinity)
+          when :zero_or_one_of   then (0..1)
+          when :one_of           then (1..1)
+          when :range_of         then args.shift
           else raise UsageFailure.new(%{invalid name string "#{name}"})
         end
         raise UsageFailure.new("must be range") unless @range.instance_of? Range
-        # blessing the array itself will turn it into a sequence 
-        @group = args
-        zero_ok = true
-        (0..args.size-1).each do |i|
-          @group[i] = GorillaSymbol.factory @group[i]
-          zero_ok = false unless @group[i].can_be_zero_length
-        end
-        @can_be_zero_length = (@range.begin == 0 or zero_ok)
+        @group = args.map{|x| GorillaSymbol.factory x }
+        @can_be_zero_length = @range.begin == 0 or nil != @group.index{|x| x.can_be_zero_length}
       end
-      def children; @group; end # for debugging from ir
-      def << jobber # for PipeHack. code smell @ note 1
-        if @is_parse 
-          super jobber
-        else  
-          @group << GorillaSymbol.factory(jobber)
-        end
-      end
+      def initial_status; @range.begin == 0 ? :D : :O ; end            
       attr_reader :range
-      attr_accessor :pipe_hack
+      attr_accessor :is_pipe_hack      
+      def can_be_zero_length; @can_be_zero_length; end 
+      def << jobber # for PipeHack. code smell (:note 1)
+        if    kind_of?(ParseTree) then super jobber
+        else; @group << GorillaSymbol.factory(jobber); end
+      end
       def expecting;
         if @frame
           @frame.map{|pair| pair[1][:obj].expecting}.flatten
@@ -397,24 +418,13 @@ module Hipe
           @group.map{|x| x.expecting}.flatten; 
         end
       end
-      def inspect
-        return super if @is_parse
-        return %{(#{@range.inspect}):#{@group.inspect}}
-      end
-      def to_s; inspect; end
-      def pretty_print(q)
-        if @is_parse; super
-        else
-          q.group 1, %{(#{range}).of }, '' do
-            q.pp @group
-          end
-        end
+      def inspect; 
+        _inspect '(',')',[@name ? %{:#{@name}} : nil , '(', @range.to_s.gsub('..Infinity',' or more'),'):'].compact.join
       end
       def init_for_parse
-        @is_parse = 1
         @frame = {}
         @group.each_with_index do |child, index|
-          @frame[index] = { :obj => child.copy_for_parse }
+          @frame[index] = { :obj => child.create_empty_parse_tree }
         end
       end
       def match token, peek
@@ -424,12 +434,14 @@ module Hipe
           child = frame_copy[key]
           child[:status] = child[:obj].match token, peek # we have to hold on to status b/c this might be a peek
           frame_copy.delete(key) if :C == child[:status]
-        end
+        end      
         status = nil
         if frame_copy.size == 0
           status = :C
         else
-          satisfied_nodes = frame_copy.select{|k,c| c[:obj].status.satisfied?}
+          satisfied_nodes = frame_copy.select{|k,c| 
+            c[:obj].status.satisfied?
+          }
           case satisfied_nodes.count
             when 2..Infinity then raise AmbiguousGrammar.new(:parse => self, :children => satisfied_children )
             when 1 then status = _advance(satisfied_nodes[0][1], is_peek)
@@ -439,7 +451,7 @@ module Hipe
             # past this point, we know there are zero satisfied (:> or :D) and zero uninterested (:C), 
             # so everyone should be (:O) which means that's what we are
             status = :O
-            unless is_peek              
+            unless is_peek 
               @frame = frame_copy
             end
           end
@@ -448,19 +460,15 @@ module Hipe
         status
       end
       def _advance satisfied_node, is_peek
-        hypothetical_size = self.size + 1        
+        hypothetical_size = self.size + 1 
         self << satisfied_node[:obj] unless is_peek
+        satisfied_node[:obj].prune!
         case hypothetical_size
           when @range.end then :>
-          when @range 
-            init_for_parse unless is_peek
-            :D
-          else 
-            init_for_parse unless is_peek
-            :O
+          when @range then init_for_parse unless is_peek; :D
+          else; init_for_parse unless is_peek; :O
         end
       end
-      def initial_status; @range.begin == 0 ? :D : :O ; end
       ## @fixme this is waiting for unparse()
       def self.join list, conj1, conj2, &block
         list.map!(&block) if block
@@ -470,11 +478,12 @@ module Hipe
         else
           joiners = ['',conj2]
           joiners += Array.new(list.size-2,conj1) if list.size >= 3
-          list.zip(joiners.reverse).flatten.join         
+          list.zip(joiners.reverse).flatten.join 
         end
       end
-    end # RangeOf    
+    end # RangeOf 
   end
 end
 # note 3 (resolved - we use them now) consider getting rid of unused base classes
 # note 5 peeking isn't even used at this point
+# note 6 you might use to_s for unparse
