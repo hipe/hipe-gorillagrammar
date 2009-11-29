@@ -51,7 +51,7 @@ module Hipe
 
     it "should work for simple compound" do
       grammar = Hipe.GorillaGrammar do
-        sequence one_or_more_of('b','e'),'c'
+        sequence one_or_more('b','e'),'c'
       end
       result = grammar.parse ['b','c']
       result.is_error?.should == false
@@ -60,7 +60,7 @@ module Hipe
     
      it "should parse a little more complex" do
        grammar = Hipe.GorillaGrammar do
-         sequence 'a',one_or_more_of('b','e'),'c'
+         sequence 'a',one_or_more('b','e'),'c'
        end
        result = grammar.parse(['a','b','e','b','c'])
        result.is_error?.should == false
@@ -69,7 +69,7 @@ module Hipe
      
      it "should render expecting message jumping btwn two frames" do
        grammar = Hipe.GorillaGrammar do
-         sequence zero_or_more_of('b','e'),'c'
+         sequence zero_or_more('b','e'),'c'
        end      
        result = grammar.parse(['d'])
        result.is_error?.should == true
@@ -78,12 +78,25 @@ module Hipe
      
      it "should handle zero or more at begin" do
        grammar = Hipe.GorillaGrammar do
-         sequence zero_or_more_of('b','e'),'c'
+         sequence zero_or_more('b','e'),'c'
        end
        result = grammar.parse(['b','e','c'])
        result.is_error?.should == false
        result.to_a.should == [['b','e'],'c']
        
-     end    
+     end
+     
+     it "should work for pp" do
+
+       
+       
+       
+       
+       
+     end
+     
+     
+     
+     
   end
 end 

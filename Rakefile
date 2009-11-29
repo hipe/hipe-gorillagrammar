@@ -18,7 +18,7 @@ Spec::Rake::SpecTask.new('rcov') do |t|
 end
 
 RCov::VerifyTask.new(:rcovv => 'rcov') do |t|
-  t.threshold = 100.0
+  t.threshold = 95.0
   t.index_html = 'coverage/index.html'
 end
 

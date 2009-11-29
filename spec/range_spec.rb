@@ -7,13 +7,13 @@ module Hipe
    
     it "should not allow an empty grammar" do
       lambda {
-        Hipe.GorillaGrammar { zero_or_more_of() }
+        Hipe.GorillaGrammar { zero_or_more() }
       }.should raise_error(GorillaGrammar::GrammarGrammarException, 'Arguments must be non-zero length')
     end
    
     it "should pass if the grammar allows it" do 
       grammar = Hipe.GorillaGrammar do
-        zero_or_more_of 'a','b','c'
+        zero_or_more 'a','b','c'
       end
       result = grammar.parse []
       result.should be_a_kind_of GorillaGrammar::ParseTree
@@ -21,7 +21,7 @@ module Hipe
    
     it "should fail unless the grammar allows it" do
       grammar = Hipe.GorillaGrammar do 
-        one_or_more_of 'a','b','c'
+        one_or_more 'a','b','c'
       end
       result = grammar.parse []
       result.should be_a_kind_of GorillaGrammar::ParseFailure
@@ -29,15 +29,15 @@ module Hipe
    
     it "should parse several tokens" do
       grammar = Hipe.GorillaGrammar do
-        one_or_more_of 'a','b','c'
+        one_or_more 'a','b','c'
       end
       result = grammar.parse ['a','b','b','a']  
     end
     
-    it "should pp as a grammar" do
+    it "should inspect as a grammar" do
       g = Hipe.GorillaGrammar { :sammy =~ (1..more).of('a','b','c') }
-      PP.pp(g,x='')
-      x.should match %r|sammy.*1\.\..*"a".*"b".*"c"|m
+      s = g.inspect
+      s.should match %r|sammy.*1.*"a".*"b".*"c"|m
     end
     
     it "is unlikely to have a minimum of two or more" do 

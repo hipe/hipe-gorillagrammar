@@ -35,10 +35,10 @@ describe Hipe::GorillaGrammar, " with shorthands" do
     a = {}
     Hipe::GorillaGrammar(){                                                            
       a[:ro56] = range_of(         5..6, 'alpha','beta','gamma')      
-      a[:ro11] = one_of(           'delta','epsilon')               
-      a[:ro01] = zero_or_one_of(   'zeta')                                  
-      a[:ro1i] = one_or_more_of(   'eta','theta')                           
-      a[:ro0i] = zero_or_more_of(  'iota')                                   
+      a[:ro11] = one(           'delta','epsilon')               
+      a[:ro01] = zero_or_one(   'zeta')                                  
+      a[:ro1i] = one_or_more(   'eta','theta')                           
+      a[:ro0i] = zero_or_more(  'iota')                                   
       a[:seq1] = sequence(         'kappa','lambda','mu')             
       a[:rexp] = regexp(           /^.$/)                           
     }                              
@@ -87,7 +87,7 @@ describe Hipe::GorillaGrammar, " with shorthands" do
       range_of_2 = 'you' | 'i' | 'he'
       range_of_3 = (1..1).of 'you','i','he'
       range_of_4 = range_of 1..1, 'you','i','he'
-      range_of_5 = one_of 'you', 'i', 'he'
+      range_of_5 = one 'you', 'i', 'he'
       :main =~ ['']
     }
     target = RangeOf.new(1..1, ['you','i','he'])
@@ -163,7 +163,7 @@ describe Hipe::GorillaGrammar, " with shorthands" do
   
   it "parse sequence 1 branch 2 x 2 x 1" do
     g = Hipe.GorillaGrammar {
-      :sentence =~ [:manufacturer[ one_of %w(jimmy dean), %w(hickory farms) ] ]
+      :sentence =~ [:manufacturer[ one %w(jimmy dean), %w(hickory farms) ] ]
     }
     thing = g.parse []
     thing.is_error?.should == true
@@ -183,7 +183,7 @@ describe Hipe::GorillaGrammar, " with shorthands" do
   
   it "parse sequence 2 branch 2 x 2 x 1" do
     g = Hipe.GorillaGrammar {
-      :sentence =~ ['want', :manufacturer[ one_of %w(jimmy dean), %w(hickory farms) ] ]
+      :sentence =~ ['want', :manufacturer[ one %w(jimmy dean), %w(hickory farms) ] ]
     }
     $stop =1 
     thing = g.parse ['want','jimmy']

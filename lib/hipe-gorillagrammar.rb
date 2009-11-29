@@ -62,7 +62,7 @@ module Hipe
         @grammars[g.name] = g
       end
       def get_grammar name; @grammars[name]; end
-      # enables the use of  =~,  ||,  (0..1).of .., .., .., and :some_name[/regexp/] in grammars
+      # enables the use of  =~,  |,  (0..1).of .., .., .., and :some_name[/regexp/] in grammars
       def enable_operator_shorthands
         return if @shorthands_enabled
         Symbol.instance_eval { include SymbolHack, PipeHack }
@@ -82,7 +82,7 @@ module Hipe
           opts[:enable_operator_shorthands] : true
       end
       def == other; s1,s2='',''; PP.pp(self,s1); PP.pp(other,s2); return s1==s2; end #hack
-      def define &block # should it return grammar or last symbol? grammar. (note 4:)
+      def define(&block) # should it return grammar or last symbol? grammar. (note 4:)
         Runtime.enable_operator_shorthands if @with_operator_shorthands
         @last_symbol = GorillaSymbol.factory instance_eval(&block) # allows anonymous ranges & sequences as grammr
         @last_symbol = @last_symbol.dereference if @last_symbol.instance_of? SymbolReference
@@ -178,7 +178,7 @@ module Hipe
       # @return the original object extended or a new object. maps data structures to symbols
       def self.factory obj
         case obj
-          when GorillaSymbol then obj # keep this one first! 
+          when GorillaSymbol then obj # this one must stay on top!
           when Array         then Sequence.new(*obj) 
                              # note RangeOf is never constructed directly with factory()
           when Symbol        then SymbolReference.new obj
@@ -190,23 +190,19 @@ module Hipe
       end
       def can_be_zero_length; false; end
       attr_accessor :name
+      def natural_name; name ? name.to_s.gsub('_',' ') : nil; end
       def create_empty_parse_tree # we use copies of the symbols *as* parse trees (note 1:)
         ret = Marshal.load Marshal.dump(self)
         ret.extend ParseTree
         ret.init_for_parse if ret.respond_to? :init_for_parse
         ret
       end
-      def prune!
-        (%w(@index @satisfied_at @group @status @frame @stop_here) & instance_variables).each{|x|
-          instance_variable_set x, nil
-        }
-        self
-      end
+      def prune! names=[]; (names+['@status']&instance_variables).each{ |x| instance_variable_set x, nil }; self end
     end
     module TerminalSymbol;
       include GorillaSymbol;
-      attr_accessor :tree, :consumed_token
-      def inspect; [@name ? @name.inspect : nil, super, %{(#{@consumed_token ? '.' : '_' })}].compact.join; end
+      attr_accessor :tree, :token
+      def inspect; [@name ? @name.inspect : nil, super, %{(#{@token ? '.' : '_' })}].compact.join; end
       def pretty_print q
         q.text inspect
         q.group 1,'{','}' do         
@@ -215,7 +211,7 @@ module Hipe
             q.text %{#{n}=}; q.pp instance_variable_get(n); q.text(';'); q.breakable 
           end
         end
-      end        
+      end
     end
     module NonTerminalSymbol; 
       include GorillaSymbol;
@@ -225,7 +221,7 @@ module Hipe
         kind_of?(ParseTree) ? builtin_equality(other) : 
         (other.class == self.class && @name == @name and @group == other.group)
       end
-      attr_reader :group;
+      attr_reader :group
       def _inspect left, right, name = nil
         name = %{:#{@name}} if name.nil? and @name
         [name, left, 
@@ -233,11 +229,10 @@ module Hipe
         right ].compact.join
       end
       def pretty_print q
-        names = instance_variables.sort
-        names.delete('@group') 
-        names.push('@group')
+        names = instance_variables.sort{|a,b| (a=='@group') ? -1 : (b=='@group' ? 1 : a<=>b)}
         names.delete_if{|x| instance_variable_get(x).nil?} # it may have been pruned
         q.group 1,'{','}' do 
+          q.breakable
           # show any non-nil properties of this object
           names.each do |name|
             q.text %{#{name}:}
@@ -257,8 +252,7 @@ module Hipe
       include TerminalSymbol
       def match token, peek
         status = if (self==token) 
-          @consumed_token = token
-          @tree = token
+          @token = token
           (:>)          
         else
           (:C)
@@ -274,12 +268,12 @@ module Hipe
       def self.construct_from_shorthand name, *args
         args[0].extend self
       end
-      def [](capture_offset); @tree[capture_offset]; end
-      def expecting; @name ? [@name] : [self.inspect]; end 
+      def [](capture_offset); @captures[capture_offset]; end
+      def expecting; @name ? [natural_name] : [self.inspect]; end 
       def match token, peek # cleaned up for note 5 @ 11/27 11:39 am
         @status = if (md = super(token)) 
-          @tree = (md.captures.size>0) ? md.captures : md[0]
-          @consumed_token = token
+          @captures = md.captures if (md.captures.size>0)
+          @token = token
           (:>)
         else
           (:C)
@@ -313,7 +307,7 @@ module Hipe
           end
         end
         if (status.satisfied?)
-          tree.prune! # pruning here should not be guaranteed
+          tree.prune! # pruning here should not be guaranteed, but note it does final advancing
         elsif (status.accepting?)
           UnexpectedEndOfInput.new :tree=>tree
         else
@@ -323,7 +317,7 @@ module Hipe
     end
     class Sequence < Array
       alias_method :builtin_equality, :==
-      include CanParse, NonTerminalSymbol
+      include CanParse, NonTerminalSymbol, PipeHack
       Grammar.register_shorthand :sequence, self
       def self.construct_from_shorthand(name, *args); self.new(*args); end 
       def initialize *args
@@ -332,13 +326,17 @@ module Hipe
         @group = args.map{|x| GorillaSymbol.factory x }
         num = @group.reverse.map{|x| x.can_be_zero_length}.find_index(false) || @group.size
         @satisfied_at = @group.size - num # trailing children that can be zero length affect when we are satisfied.
-      end
+      end      
       # code smells below -- maybe a parse, maybe not (:note 1)
       def initial_status; :O; end 
       def init_for_parse; 
         @stop_here = (@group.size-1);  
       end
       def inspect; _inspect '[',']'; end
+      def prune!
+        _advance if @current
+        super %w(@group @index @satisfied_at @status @stop_here @can_be_zero_length) 
+      end      
       def _advance
         self << @current.prune!
         @current = nil
@@ -351,7 +349,7 @@ module Hipe
       def expecting
         current = @current || @group[@index]
         expecting = current.expecting
-        if current.can_be_zero_length and @index < @group.size
+        if current.can_be_zero_length and @index < (@group.size-1)
           expecting |= @group[@index+1].expecting
         end
         expecting
@@ -388,7 +386,7 @@ module Hipe
     class RangeOf < Array
       alias_method :builtin_equality, :==
       include CanParse, NonTerminalSymbol, PipeHack
-      [:zero_or_more_of,:one_or_more_of,:zero_or_one_of,:one_of,:range_of].each do |name|
+      [:zero_or_more,:one_or_more,:zero_or_one,:one,:range_of].each do |name|
         Grammar.register_shorthand name, self
       end
       def self.construct_from_shorthand name, *args; self.new name, args; end
@@ -397,10 +395,10 @@ module Hipe
           raise GrammarGrammarException.new "Arguments must be non-zero length" 
         end
         @range = name.instance_of?(Range) ? name : case name
-          when :zero_or_more_of  then (0..Infinity)
-          when :one_or_more_of   then (1..Infinity)
-          when :zero_or_one_of   then (0..1)
-          when :one_of           then (1..1)
+          when :zero_or_more  then (0..Infinity)
+          when :one_or_more   then (1..Infinity)
+          when :zero_or_one   then (0..1)
+          when :one           then (1..1)
           when :range_of         then args.shift
           else raise UsageFailure.new(%{invalid name string "#{name}"})
         end
@@ -408,20 +406,18 @@ module Hipe
         @group = args.map{|x| GorillaSymbol.factory x }
         @can_be_zero_length = @range.begin == 0 or nil != @group.index{|x| x.can_be_zero_length}
       end
-      def initial_status; @range.begin == 0 ? :D : :O ; end            
       attr_reader :range
       attr_accessor :is_pipe_hack      
-      def can_be_zero_length; @can_be_zero_length; end 
+      def can_be_zero_length; @can_be_zero_length; end       
+      def initial_status; @range.begin == 0 ? :D : :O ; end
+      def prune!; super %w(@frame @range @group @can_be_zero_length) end           
       def << jobber # for PipeHack. code smell (:note 1)
-        if    kind_of?(ParseTree) then super jobber
+        if kind_of?(ParseTree) then super jobber
         else; @group << GorillaSymbol.factory(jobber); end
       end
       def expecting;
-        if @frame
-          @frame.map{|pair| pair[1][:obj].expecting}.flatten
-        else
-          @group.map{|x| x.expecting}.flatten; 
-        end
+        @frame ? @frame.map{|pair| pair[1][:obj].expecting}.flatten : 
+        @group.map{|x| x.expecting}.flatten; 
       end
       def inspect; 
         _inspect '(',')',[@name ? %{:#{@name}} : nil , '(', @range.to_s.gsub('..Infinity',' or more'),'):'].compact.join
@@ -466,8 +462,7 @@ module Hipe
       end
       def _advance satisfied_node, is_peek
         hypothetical_size = self.size + 1 
-        self << satisfied_node[:obj] unless is_peek
-        satisfied_node[:obj].prune!
+        self << satisfied_node[:obj].prune! unless is_peek
         case hypothetical_size
           when @range.end then :>
           when @range then init_for_parse unless is_peek; :D
@@ -492,3 +487,4 @@ end
 # note 3 (resolved - we use them now) consider getting rid of unused base classes
 # note 5 peeking isn't even used at this point
 # note 6 you might use to_s for unparse
+# note 7 todo: descention from regexp to string or vice versa
