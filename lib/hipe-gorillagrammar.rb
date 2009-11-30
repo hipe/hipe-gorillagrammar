@@ -81,7 +81,7 @@ module Hipe
         @with_operator_shorthands = opts.has_key?(:enable_operator_shorthands) ? 
           opts[:enable_operator_shorthands] : true
       end
-      def == other; s1,s2='',''; PP.pp(self,s1); PP.pp(other,s2); return s1==s2; end #hack
+      def == other; self.inspect == other.inspect end #hack      
       def define(&block) # should it return grammar or last symbol? grammar. (note 4:)
         Runtime.enable_operator_shorthands if @with_operator_shorthands
         @last_symbol = GorillaSymbol.factory instance_eval(&block) # allows anonymous ranges & sequences as grammr
@@ -124,7 +124,7 @@ module Hipe
     class UnexpectedEndOfInput < ParseFailure; 
       def message; <<-EOS.gsub(/^        /,'').gsub("\n",' ')
         sorry, unexpected end of input.  I was
-        expecting you to say #{RangeOf.join(tree.expecting,', ',' or ')}.
+        expecting you to say #{RangeOf.join(tree.expecting.uniq,', ',' or ')}.
       EOS
       end
     end
@@ -297,7 +297,6 @@ module Hipe
     module CanParse
       def parse tokens
         tree = self.create_empty_parse_tree
-        result = nil
         if tokens.size == 0 # special case -- parsing empty input
           status = tree.initial_status
         else
@@ -307,8 +306,8 @@ module Hipe
             break unless status.accepting?
           end
         end
-        if tokens.size > 0 && i < (tokens.size-1)
-          UnexpectedInput.new :token=>tokens[i+1], :tree=>tree.prune!   
+        if (:C) == status or (:> == status && tokens.size > 0 && i < tokens.size-1 ) # xtra
+          UnexpectedInput.new :token=>tokens[i+(:C==status ? 0:1)], :tree=>tree.prune!   
         elsif ! status.satisfied?
           UnexpectedEndOfInput.new :tree=>tree
         else          
@@ -348,7 +347,8 @@ module Hipe
         end
       end
       def expecting
-        current = @current || @group[@index]
+        current = @current || ( @group ? @group[@index] : nil)
+        return [] if current.nil?
         expecting = current.expecting
         if current.can_be_zero_length and @index < (@group.size-1)
           expecting |= @group[@index+1].expecting
