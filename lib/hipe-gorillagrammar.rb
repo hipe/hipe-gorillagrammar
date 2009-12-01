@@ -22,7 +22,7 @@ module Hipe
     GorillaGrammar.define(opts, &block)
   end
   module GorillaGrammar
-    VERSION = '0.0.0'
+    VERSION = '0.0.1-beta'
     Infinity = 1.0 / 0
     def self.define(opts=nil, &block)
       runtime = Runtime.instance
