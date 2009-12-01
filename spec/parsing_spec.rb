@@ -3,7 +3,6 @@ require 'hipe-gorillagrammar'
 include Hipe::GorillaGrammar
 
 
-
 describe ParseTree, 'in the context of Parsing' do
 
   it("should parse with the empty grammar")   { 
@@ -117,6 +116,23 @@ describe "in the context of Parsing, a simple concatenated grammar" do
   end
   
 end
+
+describe "in the context of Parsing a simple sequence (same as concat)" do
+  before(:each) do 
+    @abc = Hipe.GorillaGrammar do
+      sequence 'a','b','c'
+    end
+  end
+
+  it "should fail with a message when expecting more (s5)" do
+    result = @abc.parse(['a','b'])
+    result.is_error?.should == true
+    result.message.should match(/unexpected end of input/i)      
+    result.message.should match(/expecting(?: you to say) "c"/i)
+  end
+
+end
+
   
 describe "in the context of Parsing, an integrated union and concat with leading union" do
   before :each do
@@ -163,7 +179,7 @@ describe "in the context of Parsing, an integrated union and concat with leading
   it "(i6) should parse correctly A" do
     r = @g1.parse ['burger']
     r.is_error?.should == false
-    r.size.should == 1
+    r.size.should == 2
   end
 
   it "(i7) should parse correctly B" do
@@ -186,7 +202,87 @@ describe "in the context of Parsing, an integrated union and concat with leading
 
 end  
   
+
+describe "in the context of Parsing, an integrated union and concat with trailing union" do
+  before :each do
+    @g1 = Hipe.GorillaGrammar do
+      sequence one('burger','goat'),zero_or_more(['with','fries'],['with','falafel'])
+    end
+  end
+
+  it "(j1) should fail on zero" do
+    r = @g1.parse []
+    r.is_error?.should == true
+    r.should be_kind_of(UnexpectedEndOfInput)
+    r.message.should match(/expecting.*burger.*goat/i)
+  end
+
+  it "(j2) should fail on one bad token" do
+    r = @g1.parse ['falafel']
+    r.is_error?.should == true
+    r.should be_kind_of(UnexpectedInput)
+    r.message.should match(/expecting.*burger.*goat/i)
+  end
+
+  it "(j3) should fail on a second bad token (and do uniq on expecting tokens)" do
+    r = @g1.parse ['burger','without']
+    r.is_error?.should == true
+    r.should be_kind_of(UnexpectedInput)
+    r.message.should match(/expecting.*with/i)
+  end
+
+  it "(j4) should fail on a third bad token A" do
+    r = @g1.parse ['burger','with','toast']
+    r.is_error?.should == true
+    r.should be_kind_of(UnexpectedInput)
+    r.message.should match(/expecting.*fries.*falafel.*end/i)
+  end
+
+  it "(j5) should fail on two extra tokens" do
+    r = @g1.parse ['burger','with','fries','to','go']
+    r.is_error?.should == true
+    r.should be_kind_of(UnexpectedInput)
+    r.message.should match(/(?:wasn't expecting|don't know what you mean by).*to.*end/i)
+  end
+
+  it "(j6) should parse correctly A" do
+    r = @g1.parse ['burger']
+    r.is_error?.should == false
+    r.size.should == 1
+  end
+
+  it "(j7) should parse correctly B" do
+    r = @g1.parse ['burger','with','falafel']
+    r.is_error?.should == false
+    r.size.should == 2
+  end
+
+  it "(j8) should parse correctly C" do
+    r = @g1.parse ['goat','with','fries']
+    r.is_error?.should == false
+    r.size.should == 2
+  end
+
+  # no j9.  there are only 3 permutations of correct productions
+
   
+  it "parse sequence 2 branch 2 x 2 x 1 (h15)" do
+    g = Hipe.GorillaGrammar {
+      :sentence =~ ['want', :manufacturer[ one %w(jimmy dean), %w(hickory farms) ] ]
+    }
+    $stop =1 
+    thing = g.parse ['want','jimmy']
+    thing.is_error?.should == true
+    thing.should be_kind_of UnexpectedEndOfInput
+    thing.tree.expecting.should == %w("dean") 
+  end
+
+end
+  
+describe "test" do
+
+  it "union of concat"
+end    
 
 describe 'in the context of Parsing, an "and-list" gramar' do
   before(:all){ 

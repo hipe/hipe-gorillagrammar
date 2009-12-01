@@ -14,7 +14,7 @@ class Grammar
   end 
 end
 
-describe Hipe::GorillaGrammar, " with shorthands" do
+describe Hipe::GorillaGrammar, " in the context of Shorthands" do
   it "should bark on missing method" do
     lambda {
       Hipe::GorillaGrammar.define {
@@ -23,7 +23,7 @@ describe Hipe::GorillaGrammar, " with shorthands" do
     }.should raise_error(NameError)
   end
   
-  it "should bark when undefined rangeof method" do
+  it "should bark when undefined rangeof method (h1)" do
     Grammar.register_shorthand :nonexistant_method, RangeOf
     lambda{ 
       Hipe.GorillaGrammar{ nonexistant_method('x') }
@@ -31,7 +31,7 @@ describe Hipe::GorillaGrammar, " with shorthands" do
   end
   
 
-  it "every one should construct" do
+  it "every one should construct (h2)" do
     a = {}
     Hipe::GorillaGrammar(){                                                            
       a[:ro56] = range_of(         5..6, 'alpha','beta','gamma')      
@@ -56,7 +56,7 @@ describe Hipe::GorillaGrammar, " with shorthands" do
     a[:rexp].should ==   /^.$/      
   end
 
-  it "should turn pipe into RangeOf" do
+  it "should turn pipe into RangeOf (h3)" do
     rangey = nil
     g = Hipe.GorillaGrammar {
       rangey = 'you' | 'i'
@@ -64,7 +64,7 @@ describe Hipe::GorillaGrammar, " with shorthands" do
     rangey.class.ancestors.include?(RangeOf).should == true
   end
 
-  it "muliple strings with pipe" do
+  it "muliple strings with pipe (h4)" do
     rangey = nil
     g = Hipe.GorillaGrammar {
       rangey = 'you' | 'i' | 'him'
@@ -72,7 +72,7 @@ describe Hipe::GorillaGrammar, " with shorthands" do
     rangey.class.ancestors.include?(RangeOf).should == true
   end
 
-  it "should do Fixnum.of" do
+  it "should do Fixnum.of (h5)" do
     rangey = nil
     g = Hipe.GorillaGrammar {
       rangey = 1.of 'you','i'
@@ -80,7 +80,7 @@ describe Hipe::GorillaGrammar, " with shorthands" do
     rangey.class.ancestors.include?(RangeOf).should == true
   end
 
-  it "different kind of pipies should be equal " do
+  it "different kind of pipies should be equal (h6)" do
     range_of_1=range_of_2=range_of_3=range_of_4=range_of_5=target=nil
     g = Hipe.GorillaGrammar {
       range_of_1 = 1.of 'you','i','he'
@@ -100,7 +100,7 @@ describe Hipe::GorillaGrammar, " with shorthands" do
     range_of_5.inspect.should == target_str    
   end
 
-  it "should complain on bad symbol" do
+  it "should complain on bad symbol (h7)" do
     lambda {
       Hipe.GorillaGrammar {
         :some_symbol =~ 123
@@ -108,7 +108,7 @@ describe Hipe::GorillaGrammar, " with shorthands" do
     }.should raise_error(UsageFailure, %{Can't determine symbol type for "123"})
   end
 
-  it "should complain on re-definition" do
+  it "should complain on re-definition (h8)" do
     lambda {
       Hipe.GorillaGrammar {
         :symbol =~ ['this']
@@ -117,12 +117,12 @@ describe Hipe::GorillaGrammar, " with shorthands" do
     }.should raise_error(GrammarGrammarException, %r{can't redefine symbol}i)
   end
 
-  it "two ways one grammar" do
+  it "two ways one grammar (h9)" do
     g = Hipe.GorillaGrammar(:name =>:beuford) { :x =~ '.' }
     Runtime.get_grammar(:beuford).should equal(g)
   end
 
-  it "should store symbols" do
+  it "should store symbols (h10)" do
     g = Hipe.GorillaGrammar(:name=>:grammar1) {
       :subject   =~ 'you'|'i'|'he'|'she'
       :verb      =~ 1.of('run','walk','blah')
@@ -137,7 +137,7 @@ describe Hipe::GorillaGrammar, " with shorthands" do
     g[:sentence  ].inspect.should match /subject.*predicate/
   end
   
-  it "should work with symbol references" do
+  it "should work with symbol references (h11)" do
     g = Hipe.GorillaGrammar(:name=>:grammar2) {
       :alpha  =~ 'a'
       :beta   =~ 'b'
@@ -148,7 +148,7 @@ describe Hipe::GorillaGrammar, " with shorthands" do
     result.is_error?.should == false
   end
   
-  it "should report expecting right at the start of a branch" do
+  it "should report expecting right at the start of a branch (h12)" do
     g = Hipe.GorillaGrammar {
       :sentence =~ [
         'i','want','my', 
@@ -161,7 +161,7 @@ describe Hipe::GorillaGrammar, " with shorthands" do
     thing.tree.expecting.should == %w("jimmy" "hickory")  # strings with quotes in them
   end
   
-  it "parse sequence 1 branch 2 x 2 x 1" do
+  it "parse sequence 1 branch 2 x 2 x 1 (h13)" do
     g = Hipe.GorillaGrammar {
       :sentence =~ [:manufacturer[ one %w(jimmy dean), %w(hickory farms) ] ]
     }
@@ -171,7 +171,7 @@ describe Hipe::GorillaGrammar, " with shorthands" do
     thing.tree.expecting.should == %w("jimmy" "hickory") 
   end  
   
-  it "parse sequence 2 branch 2 x 2 x 1" do                                              
+  it "parse sequence 2 branch 2 x 2 x 1 (h14)" do                                              
     g = Hipe.GorillaGrammar {                                                            
       :sentence =~ ['want','jimmy']  
     }                                                                                                                                                 
@@ -180,16 +180,7 @@ describe Hipe::GorillaGrammar, " with shorthands" do
     thing.should be_kind_of UnexpectedEndOfInput                                         
     thing.tree.expecting.should == %w("jimmy")
   end                                     
-  
-  it "parse sequence 2 branch 2 x 2 x 1" do
-    g = Hipe.GorillaGrammar {
-      :sentence =~ ['want', :manufacturer[ one %w(jimmy dean), %w(hickory farms) ] ]
-    }
-    $stop =1 
-    thing = g.parse ['want','jimmy']
-    thing.is_error?.should == true
-    thing.should be_kind_of UnexpectedEndOfInput
-    thing.tree.expecting.should == %w("dean") 
-  end  
+
+  # h15 moved to another file (parsing)
 
 end
