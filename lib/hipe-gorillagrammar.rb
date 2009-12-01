@@ -1,7 +1,6 @@
 require 'rubygems'
-require 'ruby-debug'
+#require 'ruby-debug'
 require 'singleton'
-require 'orderedhash'
 
 class Symbol 
   def satisfied?; @satisfied; end

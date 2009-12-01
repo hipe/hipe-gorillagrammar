@@ -15,9 +15,9 @@ module GemHelpers
       s.email     = "mark.meves@gmail.com"
       s.homepage  = "http://github.com/hipe/hipe-gorillagrammar"
       s.date      = %q{2009-11-23}  
-      s.summary   = %q{Simple pure-ruby port of Ozawa's RBTree'}  
+      s.summary   = %q{'beta attempt at a simple LR parser generator driven by DSL under 500LOC 100% C1 test coverage'}
       s.description  = <<-EOS.strip
-      Fun experiments in writing simple grammars *with* a DSL
+      LR Parser Generator (?) under 500 LOC with 100*% C1 test coverage.  No useful AST yet.  No useful docs yet.
       EOS
       
       # s.rubyforge_project = "webrat"
