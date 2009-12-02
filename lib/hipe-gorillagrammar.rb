@@ -22,7 +22,7 @@ module Hipe
     GorillaGrammar.define(opts, &block)
   end
   module GorillaGrammar
-    VERSION = '0.0.1-beta'
+    VERSION = '0.0.1beta'
     Infinity = 1.0 / 0
     def self.define(opts=nil, &block)
       runtime = Runtime.instance
@@ -468,7 +468,7 @@ module Hipe
           else;             _reframe; :O
         end
       end
-      def _reframe; @frame = Marshal.load @frame_prototype; end
+      def _reframe; @frame = (Marshal.load @frame_prototype).map{|x| x.kind_of?(SymbolReference) ? x.dereference : x}; end
       ## @fixme this is waiting for unparse()
       def self.join list, conj1, conj2, &block
         list.map!(&block) if block
