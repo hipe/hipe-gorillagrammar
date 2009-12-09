@@ -469,7 +469,8 @@ module Hipe
         end
       end
       def _reframe; @frame = (Marshal.load @frame_prototype).map{|x| x.kind_of?(SymbolReference) ? x.dereference : x}; end
-      ## @fixme this is waiting for unparse()
+      # @deprecated -- please see Hipe::Lingual::Array in 'hipe-core', the official home for this is there. 
+      # @fixme also this is waiting for unparse() 
       def self.join list, conj1, conj2, &block
         list.map!(&block) if block
         case list.size
