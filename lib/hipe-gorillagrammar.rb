@@ -184,7 +184,11 @@ module Hipe
             raise UsageFailure.new %{Can't determine symbol type for "#{obj.inspect}"},:obj=>obj
         end
       end
-      def finalize; self; end
+      def finalize; 
+        
+        
+        self; 
+      end
       attr_accessor :name
       attr_reader :kleene
       def natural_name; name ? name.to_s.gsub('_',' ') : nil; end
@@ -295,7 +299,11 @@ module Hipe
         @actual ||= Runtime.instance.get_grammar(@grammar_name)[@name].fork_for_parse.reinit_for_parse
       end
       def dereference_light
-        Runtime.instance.get_grammar(@grammar_name)[@name]
+        it = Runtime.instance.get_grammar(@grammar_name)[@name]        
+        if (it.nil?)
+          raise GrammarGrammarException.new(%{#{@name.inspect} symbol not found.})
+        end
+        it
       end
       [:kleene, :expecting, :reinit_for_parse].each do |name|
         define_method(name){ dereference_light.send(name) }
@@ -434,7 +442,17 @@ module Hipe
         _reframe
         self
       end
-      def prune!; super %w(@frame @frame_prototype @range @group @kleene @unkleene) end
+      def finalize
+        if (:D == @status)
+          if (1==@frame.size)
+            _advance(@frame[0])
+          else
+            # raise "don't know what to do here"  @todo
+          end
+        end
+        self
+      end
+      def prune!; super %w(@frame @frame_prototype @range @group @kleene @unkleene) end           
       def << jobber # for PipeHack. code smell (:note 1)
         if kind_of?(ParseTree) then super jobber
         else; @group << GorillaSymbol.factory(jobber); end
