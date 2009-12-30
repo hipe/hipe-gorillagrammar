@@ -22,4 +22,9 @@ RCov::VerifyTask.new(:rcovv => 'rcov') do |t|
   t.index_html = 'coverage/index.html'
 end
 
+desc 'Removes trailing whitespace'
+task :whitespace do
+  sh %{find . -name '*.rb' -exec sed -i '' 's/ *$//g' {} \\;}
+end
+
 

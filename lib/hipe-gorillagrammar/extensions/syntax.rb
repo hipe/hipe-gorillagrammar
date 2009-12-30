@@ -2,7 +2,7 @@ module Hipe::GorillaGrammar
   module GorillaSymbol
     def syntax_pretty_name; @name ? @name.to_s.upcase : nil end
   end
-  
+
   module RegexpTerminal
     def syntax_tokens; [syntax] end
     def syntax; syntax_pretty_name || self end
@@ -12,11 +12,11 @@ module Hipe::GorillaGrammar
     def syntax_tokens; [syntax] end
     def syntax; self end
   end
-  
+
   class SymbolReference
     def syntax_tokens; [syntax_pretty_name] end
   end
-  
+
   module NonTerminalSymbol
     def syntax
       return (syntax_tokens * ' ').gsub(%r{(?:[\[\(] +| +[\]\)]| +\| +)}){|x| x.strip}
@@ -28,7 +28,7 @@ module Hipe::GorillaGrammar
       @group.map{ |x| x.syntax_tokens }.flatten
     end
   end
-  
+
   class RangeOf
     def syntax_tokens;
       is_one_or_more = (@range == (1..Infinity) and @group.size == 1 and @group[0].kind_of? SymbolReference)
@@ -46,5 +46,5 @@ module Hipe::GorillaGrammar
       thing.unshift @group[0].syntax_pretty_name if is_one_or_more
       thing
     end
-  end      
+  end
 end

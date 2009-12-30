@@ -5,13 +5,13 @@ include Hipe::GorillaGrammar
 
 class Grammar
   include Helpers
- # only for irb -- tokenize a string thru the shell.  careful!  
-  def parz str; 
-    tox = shell!(str); 
+ # only for irb -- tokenize a string thru the shell.  careful!
+  def parz str;
+    tox = shell!(str);
     puts "your tokens tokenized from shell:"
     pp tox
     parse tox
-  end 
+  end
 end
 
 describe Hipe::GorillaGrammar, " in the context of Shorthands" do
@@ -22,38 +22,38 @@ describe Hipe::GorillaGrammar, " in the context of Shorthands" do
       }
     }.should raise_error(NameError)
   end
-  
+
   it "should bark when undefined rangeof method (h1)" do
     Grammar.register_shorthand :nonexistant_method, RangeOf
-    lambda{ 
+    lambda{
       Hipe.GorillaGrammar{ nonexistant_method('x') }
     }.should raise_error(UsageFailure, /invalid name str/)
   end
-  
+
 
   it "every one should construct (h2)" do
     a = {}
-    Hipe::GorillaGrammar(){                                                            
-      a[:ro56] = range_of(         5..6, 'alpha','beta','gamma')      
-      a[:ro11] = one(           'delta','epsilon')               
-      a[:ro01] = zero_or_one(   'zeta')                                  
-      a[:ro1i] = one_or_more(   'eta','theta')                           
-      a[:ro0i] = zero_or_more(  'iota')                                   
-      a[:seq1] = sequence(         'kappa','lambda','mu')             
-      a[:rexp] = regexp(           /^.$/)                           
-    }                              
+    Hipe::GorillaGrammar(){
+      a[:ro56] = range_of(         5..6, 'alpha','beta','gamma')
+      a[:ro11] = one(           'delta','epsilon')
+      a[:ro01] = zero_or_one(   'zeta')
+      a[:ro1i] = one_or_more(   'eta','theta')
+      a[:ro0i] = zero_or_more(  'iota')
+      a[:seq1] = sequence(         'kappa','lambda','mu')
+      a[:rexp] = regexp(           /^.$/)
+    }
     a[:ro56].group.should ==   ["alpha","beta","gamma"]
     a[:ro56].range.should == (5..6)
     a[:ro11].group.should ==   ["delta","epsilon"]
     a[:ro11].range.should == (1..1)
-    a[:ro01].group.should ==   ['zeta']                    
+    a[:ro01].group.should ==   ['zeta']
     a[:ro01].range.should == (0..1)
     a[:ro1i].group.should ==   ['eta','theta']
     a[:ro1i].range.should == (1..Infinity)
     a[:ro0i].group.should ==   ['iota']
-    a[:ro01].range.should == (0..1)           
+    a[:ro01].range.should == (0..1)
     a[:seq1].group.should ==   ['kappa','lambda','mu']
-    a[:rexp].should ==   /^.$/      
+    a[:rexp].should ==   /^.$/
   end
 
   it "should turn pipe into RangeOf (h3)" do
@@ -97,7 +97,7 @@ describe Hipe::GorillaGrammar, " in the context of Shorthands" do
     range_of_2.inspect.should == target_str
     range_of_3.inspect.should == target_str
     range_of_4.inspect.should == target_str
-    range_of_5.inspect.should == target_str    
+    range_of_5.inspect.should == target_str
   end
 
   it "should complain on bad symbol (h7)" do
@@ -136,7 +136,7 @@ describe Hipe::GorillaGrammar, " in the context of Shorthands" do
     g[:predicate ].inspect.should match /0.*1.*adverb.*verb.*object/
     g[:sentence  ].inspect.should match /subject.*predicate/
   end
-  
+
   it "should work with symbol references (h11)" do
     g = Hipe.GorillaGrammar(:name=>:grammar2) {
       :alpha  =~ 'a'
@@ -147,11 +147,11 @@ describe Hipe::GorillaGrammar, " in the context of Shorthands" do
     result = g.parse ['a','b','c']
     result.is_error?.should == false
   end
-  
+
   it "should report expecting right at the start of a branch (h12)" do
     g = Hipe.GorillaGrammar {
       :sentence =~ [
-        'i','want','my', 
+        'i','want','my',
          :manufacturer[1.of(['jimmy','dean'],['hickory','farms'])],
       'sausage' ]
     }
@@ -160,7 +160,7 @@ describe Hipe::GorillaGrammar, " in the context of Shorthands" do
     thing.should be_kind_of UnexpectedEndOfInput
     thing.tree.expecting.should == %w("jimmy" "hickory")  # strings with quotes in them
   end
-  
+
   it "parse sequence 1 branch 2 x 2 x 1 (h13)" do
     g = Hipe.GorillaGrammar {
       :sentence =~ [:manufacturer[ one %w(jimmy dean), %w(hickory farms) ] ]
@@ -168,18 +168,18 @@ describe Hipe::GorillaGrammar, " in the context of Shorthands" do
     thing = g.parse []
     thing.is_error?.should == true
     thing.should be_kind_of UnexpectedEndOfInput
-    thing.tree.expecting.should == %w("jimmy" "hickory") 
-  end  
-  
-  it "parse sequence 2 branch 2 x 2 x 1 (h14)" do                                              
-    g = Hipe.GorillaGrammar {                                                            
-      :sentence =~ ['want','jimmy']  
-    }                                                                                                                                                 
-    thing = g.parse ['want']                                                     
-    thing.is_error?.should == true                                                       
-    thing.should be_kind_of UnexpectedEndOfInput                                         
+    thing.tree.expecting.should == %w("jimmy" "hickory")
+  end
+
+  it "parse sequence 2 branch 2 x 2 x 1 (h14)" do
+    g = Hipe.GorillaGrammar {
+      :sentence =~ ['want','jimmy']
+    }
+    thing = g.parse ['want']
+    thing.is_error?.should == true
+    thing.should be_kind_of UnexpectedEndOfInput
     thing.tree.expecting.should == %w("jimmy")
-  end                                     
+  end
 
   # h15 moved to another file (parsing)
 

@@ -1,4 +1,4 @@
-#rake spec SPEC=spec/symbol_reference_spec.rb 
+#rake spec SPEC=spec/symbol_reference_spec.rb
 require 'hipe-gorillagrammar'
 include Hipe::GorillaGrammar
 
@@ -11,7 +11,7 @@ describe SymbolReference do
 #    thing = g.parse ['want','jimmy']
 #    thing.is_error?.should == true
 #    thing.should be_kind_of UnexpectedEndOfInput
-#    thing.tree.expecting.should == %w("dean") 
+#    thing.tree.expecting.should == %w("dean")
 #  end
 #
   it "parse sequence 2 branch 2 x 2 x 1 (h15)" do
@@ -22,7 +22,7 @@ describe SymbolReference do
     thing = g.parse ['want','jimmy']
     thing.is_error?.should == true
     thing.should be_kind_of UnexpectedEndOfInput
-    thing.tree.expecting.should == %w("dean") 
+    thing.tree.expecting.should == %w("dean")
   end
-  
+
 end
