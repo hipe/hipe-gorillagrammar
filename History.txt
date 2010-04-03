@@ -1,8 +1,6 @@
-== 0.0.1 / 2009-11-30
-* 100% C0 & C1 test coverage
-* under 500 LOC
-* I think this is an LR parser generator, but i'm not sure yet
-
-
+== 0.0.0 / 2010-04-02
+  * this is a 'maintenence release' keep here for posterity,
+    and because my other gems use it but it is abaondoned
+    for something like treetop or something like parsie.
 == 0.0.0 / 2009-11-24
 * birthday (but see the original in php on my old laptop)
